@@ -13,9 +13,10 @@ public class Rook extends Piece{
     }
 
     @Override
-    public List<Move> getPossibleMoves() {
-        updatePosition();
-
+    public List<Move> getPossibleMoves(boolean bulkUpdate) {
+        if(!bulkUpdate) {
+            updatePosition();
+        }
         ArrayList<Move> moves = new ArrayList<>();
 
         for(int horizontalDirection = -1; horizontalDirection < 2; horizontalDirection++){

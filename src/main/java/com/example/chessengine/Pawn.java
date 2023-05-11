@@ -14,10 +14,11 @@ public class Pawn extends Piece{
     }
 
     @Override
-    public List<Move> getPossibleMoves() {
+    public List<Move> getPossibleMoves(boolean bulkUpdate) {
 
-        updatePosition();
-
+        if(!bulkUpdate) {
+            updatePosition();
+        }
         ArrayList<Move> moves = new ArrayList<>();
 
         int direction = color == PieceColor.Black ? +1 : -1;

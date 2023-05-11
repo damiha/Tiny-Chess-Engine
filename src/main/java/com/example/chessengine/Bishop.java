@@ -9,8 +9,11 @@ public class Bishop extends Piece{
     }
 
     @Override
-    public List<Move> getPossibleMoves() {
-        updatePosition();
+    public List<Move> getPossibleMoves(boolean bulkUpdate) {
+
+        if(!bulkUpdate){
+            updatePosition();
+        }
 
         ArrayList<Move> moves = new ArrayList<>();
 

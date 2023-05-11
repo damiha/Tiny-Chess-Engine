@@ -9,9 +9,11 @@ public class Knight extends Piece{
     }
 
     @Override
-    public List<Move> getPossibleMoves() {
+    public List<Move> getPossibleMoves(boolean bulkUpdate) {
 
-        updatePosition();
+        if(!bulkUpdate) {
+            updatePosition();
+        }
 
         ArrayList<Move> moves = new ArrayList<>();
 

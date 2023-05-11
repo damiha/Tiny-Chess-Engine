@@ -8,6 +8,7 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
@@ -55,7 +56,7 @@ public class MainApplication extends Application {
     Game game;
 
     // otherwise flip board and let computer make first move
-    boolean humanStarts = false;
+    boolean humanStarts = true;
     // prevent engine from running immediately
     boolean screenDrawnSinceMove = false;
 
@@ -71,6 +72,12 @@ public class MainApplication extends Application {
     double percentageDone = 0.0;
 
     Minimax minimax = null;
+
+    boolean engineResigned = false;
+
+    int numberOfTopLevelBranches = 0;
+
+    boolean sideChosen = false;
 
     @Override
     public void start(Stage stage) throws IOException {
@@ -107,40 +114,76 @@ public class MainApplication extends Application {
             public void handle(long currentNanoTime) {
 
                 // TODO: move this into a separate thread so that screen doesn't freezes
-                if(!isHumansTurn() && screenDrawnSinceMove && minimax == null) {
-                    minimax = new Minimax(game);
-                    minimax.start();
-                }
-                // done
-                if(!isHumansTurn() && minimax != null && minimax.isFinished){
-                    game.executeMove(minimax.bestMove);
+                if(sideChosen && !game.isOver()) {
+                    if (!isHumansTurn() && screenDrawnSinceMove && minimax == null) {
+                        minimax = new Minimax(game);
+                        minimax.start();
+                    }
+                    // done
+                    if (!isHumansTurn() && minimax != null && minimax.isFinished) {
+                        if (minimax.bestMove != null) {
+                            game.executeMove(minimax.bestMove);
+                        } else {
+                            engineResigned = false;
+                        }
 
-                    // update statistic
-                    searchDepth = minimax.searchDepth;
-                    alphaBeta = minimax.alphaBetaPruningEnabled;
-                    moveSorting = minimax.moveSortingEnabled;
-                    runtimeInSeconds = minimax.runtimeInSeconds;
-                    totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
-                    positionsEvaluatedPerSecond = minimax.positionsEvaluatedPerSecond;
-                    cutoffReached = minimax.cutoffReached;
-                    valueOfMove = minimax.valueOfMove;
+                        // update statistic
+                        searchDepth = minimax.searchDepth;
+                        numberOfTopLevelBranches = minimax.numberOfTopLevelBranches;
+                        alphaBeta = minimax.alphaBetaPruningEnabled;
+                        moveSorting = minimax.moveSortingEnabled;
+                        runtimeInSeconds = minimax.runtimeInSeconds;
+                        totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
+                        positionsEvaluatedPerSecond = minimax.positionsEvaluatedPerSecond;
+                        cutoffReached = minimax.cutoffReached;
+                        valueOfMove = minimax.valueOfMove;
 
-                    screenDrawnSinceMove = false;
+                        screenDrawnSinceMove = false;
 
-                    minimax = null;
+                        minimax = null;
+                    }
                 }
 
                 clearScreen(gc);
-                drawGame(gc);
-                drawPanel(gc);
 
-                screenDrawnSinceMove = true;
+                if(!sideChosen){
+                    drawStartScreen(gc);
+                }
+                else if(game.isOver()){
+                    drawGameOverScreen(gc);
+                }
+                else{
+                    drawGame(gc);
+                    drawPanel(gc);
+                    screenDrawnSinceMove = true;
+                }
             }
         }.start();
 
 
         root.getChildren().add(canvas);
-        stage.setScene(new Scene(root));
+        Scene scene = new Scene(root);
+        scene.setOnKeyPressed(event -> {
+            if(sideChosen && event.getCode().isWhitespaceKey()){
+
+                // stop minimax if running
+                if(minimax != null){
+                    minimax.stop();
+                    minimax = null;
+                }
+                game.changeTurns();
+            }
+            if(!sideChosen){
+                if(event.getCode() == KeyCode.W){
+                    humanStarts = false;
+                }
+                else if(event.getCode() == KeyCode.B){
+                    humanStarts = true;
+                }
+                sideChosen = true;
+            }
+        });
+        stage.setScene(scene);
         stage.show();
     }
 
@@ -162,7 +205,7 @@ public class MainApplication extends Application {
             }
             else if(isPieceSelected){
                 // we have selected a piece and press somewhere we can go - we want to make a move
-                List<Move> moves = selectedPiece.getPossibleMoves();
+                List<Move> moves = selectedPiece.getPossibleMoves(game.bulkUpdate);
                 boolean foundMoveForMousePosition = false;
                 for(Move move : moves){
                     if(move.endingPosition[0] == boardX && move.endingPosition[1] == boardY){
@@ -198,16 +241,28 @@ public class MainApplication extends Application {
         gc.fillRect(0, 0, windowWidth, windowHeight);
     }
 
+    boolean isPerspectiveFlipped(){
+        return humanStarts;
+    }
+
     private boolean isInsideBoard(int mouseX, int mouseY){
         return mouseX >= offsetX && mouseX <= (offsetX + boardSideLength)
                     && mouseY >= offsetY && mouseY <= (offsetY + boardSideLength);
     }
 
     private int[] mouseCoordsToGameCoords(int mouseX, int mouseY){
-        return new int[]{
-                (mouseX - offsetX) / tileLength,
-                (mouseY - offsetY) / tileLength
-        };
+        if(isPerspectiveFlipped()){
+            return new int[]{
+                    7 - ((mouseX - offsetX) / tileLength),
+                    7 - ((mouseY - offsetY) / tileLength)
+            };
+        }
+        else{
+            return new int[]{
+                    (mouseX - offsetX) / tileLength,
+                    (mouseY - offsetY) / tileLength
+            };
+        }
     }
 
     private void drawCheckerBoard(GraphicsContext gc){
@@ -270,18 +325,32 @@ public class MainApplication extends Application {
         for(int y = 0; y < 8; y++){
             for(int x = 0; x < 8; x++){
                 Piece piece = game.position[y][x];
-                if(piece != null)
-                    gc.drawImage(getImage(piece), offsetX + x * tileLength, offsetY + y * tileLength);
+                if(piece != null) {
+                    if(isPerspectiveFlipped()){
+                        gc.drawImage(getImage(piece), offsetX + (7-x) * tileLength, offsetY + (7-y) * tileLength);
+                    }
+                    else{
+                        gc.drawImage(getImage(piece), offsetX + x * tileLength, offsetY + y * tileLength);
+                    }
+                }
             }
         }
     }
 
     // assume there's a piece selected
     private void drawMovesOfSelectedPiece(GraphicsContext gc){
-        List<Move> moves = selectedPiece.getPossibleMoves();
+        // no bulk update for individual pieces
+        List<Move> moves = selectedPiece.getPossibleMoves(false);
         for(Move move : moves){
-            int x = offsetX + move.endingPosition[0] * tileLength;
-            int y = offsetY + move.endingPosition[1] * tileLength;
+            int x;
+            int y;
+            if(isPerspectiveFlipped()){
+                x = offsetX + (7 - move.endingPosition[0]) * tileLength;
+                y = offsetY + (7 - move.endingPosition[1]) * tileLength;
+            }else{
+                x = offsetX + move.endingPosition[0] * tileLength;
+                y = offsetY + move.endingPosition[1] * tileLength;
+            }
             gc.setFill(Color.RED);
             // fill oval uses diameter
             gc.fillOval(x + tileLength/2 - cursorRadius, y + tileLength/2 - cursorRadius,
@@ -297,10 +366,36 @@ public class MainApplication extends Application {
         }
     }
 
+    private void drawGameOverScreen(GraphicsContext gc){
+
+        int x = windowWidth / 2;
+        int y = windowHeight / 2;
+
+        gc.setFill(Color.BLACK);
+        if(engineResigned){
+            gc.fillText("Egine resigned!", x, y);
+        }
+        else{
+            gc.fillText(game.whiteWon() ? "White won!" : "Black won!", x, y);
+        }
+    }
+
+    private void drawStartScreen(GraphicsContext gc){
+        int x = windowWidth / 2 - boardSideLength/4;
+        int y = windowHeight / 2;
+
+        gc.setFill(Color.BLACK);
+        gc.fillText("Press [W]/[B] to choose the perspective of the computer player!", x, y);
+    }
+
     private void drawPanel(GraphicsContext gc){
         // draw frame
         gc.setStroke(Color.BLACK);
         gc.strokeRect(panelX, panelY, panelWidth, panelHeight);
+
+        if(game.whiteKing == null || game.blackKing == null){
+            throw new RuntimeException("ERROR: king missing!");
+        }
 
         String whoseTurnString = game.whoseTurn == PieceColor.White ? "WHITE" : "BLACK";
         String whiteCastleRights =
@@ -314,6 +409,8 @@ public class MainApplication extends Application {
                 "Turn: " + whoseTurnString,
                 "Castling white: " + whiteCastleRights,
                 "Castling black: " + blackCastleRights,
+                "Bulk-update: " + game.bulkUpdate,
+                "Branching factor: " + numberOfTopLevelBranches,
                 "Search depth: " + searchDepth,
                 "Alpha-Beta: " + alphaBeta,
                 "Move sorting: " + moveSorting,
@@ -321,8 +418,11 @@ public class MainApplication extends Application {
                 "Positions evaluated: " + totalNumberPositionsEvaluated,
                 "Positions evaluated (per sec): " + positionsEvaluatedPerSecond,
                 "Cut-off reached: " + cutoffReached,
-                "Value of move:" + valueOfMove,
+                "Value of move: " + valueOfMove,
                 "Progress: " + Math.round((minimax != null ? minimax.percentageDone : 0.0) * 100.0f) + "%",
+                "----",
+                "[SPACE] to switch sides",
+                engineResigned ? "Engine resigned!" : ""
         };
 
         gc.setFill(Color.BLACK);

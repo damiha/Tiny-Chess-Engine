@@ -17,6 +17,8 @@ public class Game {
 
     boolean debugOn = false;
 
+    boolean bulkUpdate = true;
+
     public Game(){
         position = getStartingPosition();
         whoseTurn = PieceColor.White;
@@ -169,6 +171,13 @@ public class Game {
             }
             position[startY][5] = position[startY][7];
             position[startY][7] = null;
+
+            if(startY == 0){
+                whiteKing.hasCastled = true;
+            }
+            else{
+                blackKing.hasCastled = true;
+            }
         }
         else if(move.isLongCastle){
             position[startY][3] = position[startY][0];
@@ -192,7 +201,7 @@ public class Game {
             history += ("\n" + move);
             boardHistory += (this.toString() + "\n");
         }
-        whoseTurn = whoseTurn == PieceColor.White ? PieceColor.Black : PieceColor.White;
+        changeTurns();
     }
 
     public static boolean insideBoard(int[] position){
@@ -213,15 +222,30 @@ public class Game {
     List<Move> getPossibleMoves(){
         ArrayList<Move> possibleMoves = new ArrayList<>();
 
+        if(bulkUpdate){
+            bulkUpdate();
+        }
+
         for(int y = 0; y < 8; y++){
             for(int x = 0; x < 8; x++){
                 if(position[y][x] != null && position[y][x].color == whoseTurn){
-                    possibleMoves.addAll(position[y][x].getPossibleMoves());
+                    possibleMoves.addAll(position[y][x].getPossibleMoves(bulkUpdate));
                 }
             }
         }
 
         return possibleMoves;
+    }
+
+    void bulkUpdate(){
+        for(int y = 0; y < 8; y++){
+            for(int x = 0; x < 8; x++){
+                if(position[y][x] != null){
+                    position[y][x].x = x;
+                    position[y][x].y = y;
+                }
+            }
+        }
     }
 
     Game getDeepCopy(){
@@ -252,6 +276,7 @@ public class Game {
         }
         copiedGame.whoseTurn = whoseTurn;
         copiedGame.debugOn = debugOn;
+        copiedGame.bulkUpdate = bulkUpdate;
 
         if(debugOn) {
             copiedGame.history = history;
@@ -275,6 +300,10 @@ public class Game {
             res += "\n";
         }
         return res;
+    }
+
+    void changeTurns(){
+        whoseTurn = whoseTurn == PieceColor.White ? PieceColor.Black : PieceColor.White;
     }
 
     // TODO: detect stale mate, no one can move anymore

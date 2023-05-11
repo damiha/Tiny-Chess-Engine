@@ -9,10 +9,11 @@ public class Queen extends Piece{
     }
 
     @Override
-    public List<Move> getPossibleMoves() {
+    public List<Move> getPossibleMoves(boolean bulkUpdate) {
 
-        updatePosition();
-
+        if(!bulkUpdate) {
+            updatePosition();
+        }
         ArrayList<Move> moves = new ArrayList<>();
 
         // captures flag set by rook and bishop
@@ -21,7 +22,7 @@ public class Queen extends Piece{
         tempRook.x = x;
         tempRook.y = y;
 
-        for(Move move : tempRook.getPossibleMoves()){
+        for(Move move : tempRook.getPossibleMoves(bulkUpdate)){
             // exchange rook for queen
             move.piece = this;
             moves.add(move);
@@ -32,7 +33,7 @@ public class Queen extends Piece{
         tempBishop.x = x;
         tempBishop.y = y;
 
-        for(Move move : tempBishop.getPossibleMoves()){
+        for(Move move : tempBishop.getPossibleMoves(bulkUpdate)){
             // exchange bishop for queen
             move.piece = this;
             moves.add(move);

@@ -6,20 +6,22 @@ import java.util.List;
 public class King extends Piece{
 
     boolean canShortCastle, canLongCastle;
+    boolean hasCastled;
     public King(PieceColor color, Game game) {
         super(color, game);
 
         canShortCastle = true;
         canLongCastle = true;
+        hasCastled = false;
     }
 
     @Override
-    public List<Move> getPossibleMoves() {
+    public List<Move> getPossibleMoves(boolean bulkUpdate) {
 
         // TODO: add checkmate detection and stop King from going there
-
-        updatePosition();
-
+        if(!bulkUpdate) {
+            updatePosition();
+        }
         ArrayList<Move> moves = new ArrayList<>();
         // standard star moves
         int[][] deltas = {
@@ -69,6 +71,7 @@ public class King extends Piece{
         // castle rights have to be copied over
         copiedKing.canLongCastle = canLongCastle;
         copiedKing.canShortCastle = canShortCastle;
+        copiedKing.hasCastled = hasCastled;
 
         return copiedKing;
     }

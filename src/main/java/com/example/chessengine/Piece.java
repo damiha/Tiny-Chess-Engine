@@ -24,7 +24,7 @@ public abstract class Piece {
             }
         }
     }
-    public abstract List<Move> getPossibleMoves();
+    public abstract List<Move> getPossibleMoves(boolean bulkUpdate);
 
     public abstract Piece getDeepCopy(Game copiedGame);
     @Override
