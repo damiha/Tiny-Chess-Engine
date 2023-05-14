@@ -1,6 +1,6 @@
 # Minimax Chess Engine
 
-## a minimalilst chess engine in Java written in less than 24 hours
+## a minimalistic chess engine in Java written in less than 24 hours
 
 What is implemented:
 
