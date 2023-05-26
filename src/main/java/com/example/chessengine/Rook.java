@@ -6,17 +6,15 @@ import java.util.List;
 public class Rook extends Piece{
 
     // necessary for castling rights
-    boolean inStartingPosition;
-    public Rook(PieceColor color, Game game) {
-        super(color, game);
-        inStartingPosition = true;
+    boolean onShortSide;
+    public Rook(PieceColor color, int x, int y, Game game, boolean onShortSide) {
+        super(color, x, y, game);
+        this.onShortSide = onShortSide;
     }
 
     @Override
-    public List<Move> getPossibleMoves(boolean bulkUpdate) {
-        if(!bulkUpdate) {
-            updatePosition();
-        }
+    public List<Move> getPossibleMoves() {
+
         ArrayList<Move> moves = new ArrayList<>();
 
         for(int horizontalDirection = -1; horizontalDirection < 2; horizontalDirection++){
@@ -25,8 +23,7 @@ public class Rook extends Piece{
                 if(game.canLandOn(endingPosition, color)){
                     Move move = new Move(this, endingPosition);
                     if(game.canCaptureSomethingAt(endingPosition, color)){
-                        move.isCapture = true;
-                        move.captureValueDifference = Minimax.naivePieceValue(game.pieceAt(endingPosition)) - Minimax.naivePieceValue(this);
+                        move.markAsCapture(game.getPieceAt(endingPosition));
                         moves.add(move);
                         break;
                     }
@@ -44,8 +41,7 @@ public class Rook extends Piece{
                 if(game.canLandOn(endingPosition, color)){
                     Move move = new Move(this, endingPosition);
                     if(game.canCaptureSomethingAt(endingPosition, color)){
-                        move.isCapture = true;
-                        move.captureValueDifference = Minimax.naivePieceValue(game.pieceAt(endingPosition)) - Minimax.naivePieceValue(this);
+                        move.markAsCapture(game.getPieceAt(endingPosition));
                         moves.add(move);
                         break;
                     }
@@ -58,13 +54,6 @@ public class Rook extends Piece{
         }
 
         return moves;
-    }
-
-    @Override
-    public Piece getDeepCopy(Game copiedGame) {
-        Rook copiedRook = new Rook(color, copiedGame);
-        copiedRook.inStartingPosition = inStartingPosition;
-        return copiedRook;
     }
 
     @Override

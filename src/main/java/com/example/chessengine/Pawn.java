@@ -7,18 +7,15 @@ public class Pawn extends Piece{
 
     // TODO: add en passant later
     boolean inStartingPosition;
-    public Pawn(PieceColor color, Game game) {
-        super(color, game);
+    public Pawn(PieceColor color, int x, int y, Game game) {
+        super(color, x, y,game);
         // can move two spots
         inStartingPosition = true;
     }
 
     @Override
-    public List<Move> getPossibleMoves(boolean bulkUpdate) {
+    public List<Move> getPossibleMoves() {
 
-        if(!bulkUpdate) {
-            updatePosition();
-        }
         ArrayList<Move> moves = new ArrayList<>();
 
         int direction = color == PieceColor.Black ? +1 : -1;
@@ -27,15 +24,18 @@ public class Pawn extends Piece{
         boolean oneStepDoable = false;
 
         // one step in front empty
-        if(game.position[y + 1 * direction][x] == null){
+        if(game.position[y + direction][x] == null){
             Move oneStep = new Move(this, new int[]{x, y + direction});
-            oneStep.isPromotion = (y + direction) == 0 || (y + direction) == 7;
+            if((y + direction) == 0 || (y + direction) == 7){
+                oneStep.markAsPromotion(new Queen(color, x, y + direction, game));
+            }
             moves.add(oneStep);
             oneStepDoable = true;
         }
         // two-step in front (you can never promote with this move)
         if(inStartingPosition && oneStepDoable && game.position[y + 2 * direction][x] == null){
             Move twoStep = new Move(this, new int[]{x, y + 2 * direction});
+            twoStep.isTwoStepPawnMove = true;
             moves.add(twoStep);
         }
         // left capture
@@ -44,9 +44,12 @@ public class Pawn extends Piece{
                 game.position[y + direction][leftX] != null &&
                 game.position[y + direction][leftX].color != this.color){
             Move leftCapture = new Move(this, new int[]{leftX, y + direction});
-            leftCapture.isCapture = true;
-            leftCapture.captureValueDifference = Minimax.naivePieceValue(game.pieceAt(leftCapture.endingPosition)) - Minimax.naivePieceValue(this);
-            leftCapture.isPromotion = (y + direction) == 0 || (y + direction) == 7;
+
+            leftCapture.markAsCapture(game.getPieceAt(leftCapture.endingPosition));
+
+            if((y + direction) == 0 || (y + direction) == 7){
+                leftCapture.markAsPromotion(new Queen(color, leftX, y + direction, game));
+            }
             moves.add(leftCapture);
         }
         // right capture
@@ -55,20 +58,34 @@ public class Pawn extends Piece{
                 game.position[y + direction][rightX] != null &&
                 game.position[y + direction][rightX].color != this.color){
             Move rightCapture = new Move(this, new int[]{rightX, y + direction});
-            rightCapture.isCapture = true;
-            rightCapture.captureValueDifference = Minimax.naivePieceValue(game.pieceAt(rightCapture.endingPosition)) - Minimax.naivePieceValue(this);
-            rightCapture.isPromotion = (y + direction) == 0 || (y + direction) == 7;
+
+            rightCapture.markAsCapture(game.getPieceAt(rightCapture.endingPosition));
+
+            if((y + direction) == 0 || (y + direction) == 7){
+                rightCapture.markAsPromotion(new Queen(color, rightX, y + direction, game));
+            }
             moves.add(rightCapture);
         }
 
-        return moves;
-    }
+        // en passant
+        if(game.enPassantEnabled && !game.executedMoves.isEmpty()){
+            Move lastMove = game.executedMoves.peek();
+            // two step move to same height
+            if(lastMove.isTwoStepPawnMove && lastMove.endingPosition[1] == y){
+                Move enPassantCapture = new Move(this, new int[]{lastMove.endingPosition[0], y + direction});
+                enPassantCapture.markAsEnPassantCapture(lastMove.piece);
+                moves.add(enPassantCapture);
+            }
+        }
 
-    @Override
-    public Piece getDeepCopy(Game copiedGame) {
-        Pawn copiedPawn = new Pawn(color, copiedGame);
-        copiedPawn.inStartingPosition = inStartingPosition;
-        return copiedPawn;
+        // important for undo move
+        if(inStartingPosition){
+            for(Move move : moves){
+                move.isFirstMove = true;
+            }
+        }
+
+        return moves;
     }
 
     @Override

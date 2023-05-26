@@ -1,41 +1,48 @@
 package com.example.chessengine;
 
+import java.nio.file.DirectoryStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
+import java.util.function.BiFunction;
 
 public class Game {
 
     Piece[][] position;
+    Stack<Move> executedMoves;
+    Stack<CastleRights> storedCastleRights;
     PieceColor whoseTurn;
 
     // references to kings important for castle rights, game over etc
     // gets set in getStartingPosition()
     King whiteKing, blackKing;
 
-    String history = "";
-    String boardHistory = "";
+    Stack<String> history;
+    Stack<String> boardHistory;
 
     boolean debugOn = false;
-
-    boolean bulkUpdate = true;
+    boolean enPassantEnabled = true;
+    ArrayList<Move> possibleMovesInCurrentPosition;
 
     public Game(){
         position = getStartingPosition();
         whoseTurn = PieceColor.White;
-        boardHistory += (this.toString() + "\n");
-    }
-    public Game(boolean emptyPosition){
-        if(!emptyPosition)
-            position = getStartingPosition();
-        else{
-            position = new Piece[8][8];
-        }
-        whoseTurn = PieceColor.White;
+
+        history = new Stack<>();
+        boardHistory = new Stack<>();
+
+        boardHistory.push(this.toString());
+
+        executedMoves = new Stack<>();
+        storedCastleRights = new Stack<>();
+
+        possibleMovesInCurrentPosition = new ArrayList<>();
+        setPossibleMoves(FilterMode.AllMoves);
     }
 
     Piece[] getPieceRow(PieceColor color){
-
-        King king = new King(color, this);
+        int y = color == PieceColor.White ? 7 : 0;
+        King king = new King(color, 4, y,this);
         // add reference
         if(color == PieceColor.White){
             whiteKing = king;
@@ -44,21 +51,21 @@ public class Game {
             blackKing = king;
         }
         return new Piece[]{
-                new Rook(color, this),
-                new Knight(color, this),
-                new Bishop(color, this),
-                new Queen(color, this),
+                new Rook(color, 0, y, this, false),
+                new Knight(color, 1, y, this),
+                new Bishop(color, 2, y, this),
+                new Queen(color, 3, y, this),
                 king,
-                new Bishop(color, this),
-                new Knight(color, this),
-                new Rook(color, this)
+                new Bishop(color, 5, y, this),
+                new Knight(color, 6, y, this),
+                new Rook(color, 7, y, this, true)
         };
     }
 
     Piece[] getPawnRow(PieceColor color){
         Piece[] pawns = new Piece[8];
         for(int i = 0; i < 8; i++){
-            pawns[i] = new Pawn(color, this);
+            pawns[i] = new Pawn(color, i, color == PieceColor.White ? 6 : 1, this);
         }
         return pawns;
     }
@@ -76,213 +83,246 @@ public class Game {
                 getPieceRow(PieceColor.White)
         };
     }
-    void executeMove(Move move){
 
-        // reject moves that are outside
-        if(!insideBoard(move.endingPosition)){
-            throw new RuntimeException("ERROR: illegal move!");
+    // TODO: update rights
+    void undoLastMove(){
+        if(!executedMoves.isEmpty()) {
+            Move move = executedMoves.pop();
+
+            if(move.isCastle()){
+                undoCastling(move);
+            }
+            else {
+                // replace first by pawn again and then move back
+                if (move.isPromotion()) {
+                    placePieceAt(move.piece, move.endingPosition);
+                }
+
+                movePiece(move.endingPosition, move.startingPosition);
+
+                if (move.isCapture()) {
+                    placePieceAt(move.getCapturedPiece(), move.getCapturedPiece().getPosition());
+                }
+                if(move.piece instanceof Pawn pawn && move.isFirstMove){
+                    pawn.inStartingPosition = true;
+                }
+            }
+            // castling rights are stored at every time step
+            loadLastCastleRights();
+
+            if(debugOn) {
+                boardHistory.pop();
+                history.pop();
+            }
+            changeTurns();
         }
-        else if(isOver()){
-            throw new RuntimeException("ERROR: game is over!");
+    }
+
+    void loadLastCastleRights(){
+        CastleRights lastCastleRights = storedCastleRights.pop();
+        whiteKing.canShortCastle = lastCastleRights.whiteCanShortCastle;
+        whiteKing.canLongCastle = lastCastleRights.whiteCanLongCastle;
+        blackKing.canShortCastle = lastCastleRights.blackCanShortCastle;
+        blackKing.canLongCastle = lastCastleRights.blackCanLongCastle;
+    }
+
+    void undoCastling(Move move){
+        King kingWhoCastled = (King)move.piece;
+        int kingRow = kingWhoCastled.color == PieceColor.White ? 7 : 0;
+
+        if(move.isShortCastle){
+            // move king
+            movePiece(new int[]{6, kingRow}, new int[]{4, kingRow});
+            // move rook
+            movePiece(new int[]{5, kingRow}, new int[]{7, kingRow});
         }
-
-        // can't do the movement if it is a promotion
-
-        // every move changes a piece position (promotion, castling needs steps after piece movement)
-        int endX = move.endingPosition[0];
-        int endY = move.endingPosition[1];
-        int startX = move.startingPosition[0];
-        int startY = move.startingPosition[1];
-
-        // if we capture the king, invalidate the references for whiteKing and blackKing
-        boolean whiteKingCaptured = false;
-        boolean blackKingCaptured = false;
-        if(move.isCapture && position[endY][endX] == whiteKing){
-            whiteKingCaptured = true;
+        else{
+            // move king
+            movePiece(new int[]{2, kingRow}, new int[]{4, kingRow});
+            // move rook
+            movePiece(new int[]{3, kingRow}, new int[]{0, kingRow});
         }
-        if(move.isCapture && position[endY][endX] == blackKing){
-            blackKingCaptured = true;
-        }
+    }
 
+    void placePieceAt(Piece piece, int[] destination){
+        position[destination[1]][destination[0]] = piece;
+    }
+
+    void movePiece(int[] startingPosition, int[] endingPosition){
+        Piece toBeMoved = getPieceAt(startingPosition);
+        assert toBeMoved != null : "can't move non-existing piece";
+        placePieceAt(toBeMoved, endingPosition);
+        placePieceAt(null, startingPosition);
+
+        toBeMoved.setPosition(endingPosition);
+    }
+    void movePiece(Move move){
+        movePiece(move.startingPosition, move.endingPosition);
+    }
+    void updateCastleRights(Move move){
         // rook is captured - castling right is lost
-        if(move.isCapture && position[endY][endX] instanceof Rook){
-            // if moved, castling right already lost
-            // assume not moved
-            Rook capturedRook = (Rook)position[endY][endX];
-            if(capturedRook.inStartingPosition){
-                if(capturedRook.color == PieceColor.White){
-                    if(endX == 7){
-                        whiteKing.canShortCastle = false;
-                    }
-                    else{
-                        whiteKing.canLongCastle = false;
-                    }
-                }
-                else{
-                    if(endX == 7){
-                        blackKing.canShortCastle = false;
-                    }
-                    else{
-                        blackKing.canLongCastle = false;
-                    }
-                }
-            }
+        if(move.isCapture() && move.getCapturedPiece() instanceof Rook capturedRook){
+            removeCastleRightAfterRookCapture(capturedRook);
         }
-
-        // when we move, destination tile is always null/empty
-        position[endY][endX] = position[startY][startX];
-        position[startY][startX] = null;
-
-        // take first mover right away
-        if(move.piece instanceof Pawn){
-            ((Pawn) move.piece).inStartingPosition = false;
-        }
-        // rook moves and king loses castling rights
-        else if(move.piece instanceof Rook && ((Rook)move.piece).inStartingPosition){
-            Rook rook = (Rook) move.piece;
-            // starting position can tell us which side and king
-            if(startY == 0){
-                if(startX == 0){
-                    blackKing.canLongCastle = false;
-                }
-                else if(startX == 7){
-                    blackKing.canShortCastle = false;
-                }
-            }
-            else if(startY == 7){
-                if(startX == 0){
-                    whiteKing.canLongCastle = false;
-                }
-                else if(startX == 7){
-                    whiteKing.canShortCastle = false;
-                }
-            }
+        if(move.piece instanceof Rook movedRook){
+            removeCastleRightAfterRookMove(movedRook);
         }
         // when king moves, both castling rights are taken away
-        else if(move.piece instanceof King){
-            King king = (King) move.piece;
+        if(move.piece instanceof King king){
             king.canLongCastle = false;
             king.canShortCastle = false;
         }
-        // move rook as well (we assume its at the right position
-        if(move.isShortCastle){
-            if(!(position[startY][7] instanceof Rook)){
-                throw new RuntimeException("ERROR: Rook not there!");
-            }
-            position[startY][5] = position[startY][7];
-            position[startY][7] = null;
+    }
+    void updatePawnRights(Move move){
+        // take first mover right away
+        if(move.piece instanceof Pawn pawn){
+            pawn.inStartingPosition = false;
+        }
+    }
 
-            if(startY == 0){
-                whiteKing.hasCastled = true;
-            }
-            else{
-                blackKing.hasCastled = true;
-            }
+    void castle(Move move){
+        King kingWhoCastled = (King)move.piece;
+        int kingRow = kingWhoCastled.color == PieceColor.White ? 7 : 0;
+
+        if(move.isShortCastle){
+            // move king
+            movePiece(new int[]{4, kingRow}, new int[]{6, kingRow});
+            // move rook
+            movePiece(new int[]{7, kingRow}, new int[]{5, kingRow});
         }
-        else if(move.isLongCastle){
-            position[startY][3] = position[startY][0];
-            position[startY][0] = null;
+        else{
+            // move king
+            movePiece(new int[]{4, kingRow}, new int[]{2, kingRow});
+            // move rook
+            movePiece(new int[]{0, kingRow}, new int[]{3, kingRow});
         }
+    }
+    void executeMove(Move move){
+
+        assert insideBoard(move.endingPosition) : "ERROR: illegal move!";
+        assert !isOver() : "ERROR: game is over!";
+
+        storedCastleRights.push(new CastleRights(whiteKing, blackKing));
+
+        // move rook as well (we assume its at the right position
+        if(move.isCastle()){
+            castle(move);
+        }
+        else{
+            movePiece(move);
+        }
+        // a pawn is removed without landing on its square
+        if(move.isEnPassantCapture()){
+            placePieceAt(null, move.getCapturedPiece().getPosition());
+        }
+
+        updateCastleRights(move);
+        updatePawnRights(move);
+
         // TODO: change pawn to whatever player wants (popup window)
         // for now always promote to queen
-        else if(move.isPromotion){
-            position[endY][endX] = new Queen(whoseTurn, this);
-        }
-
-        // take kings of the board
-        if(whiteKingCaptured){
-            whiteKing = null;
-        }
-        if(blackKingCaptured){
-            blackKing = null;
+        if(move.isPromotion()){
+            placePieceAt(move.getPromotedTo(), move.endingPosition);
         }
 
         if(debugOn) {
-            history += ("\n" + move);
-            boardHistory += (this.toString() + "\n");
+            history.push(move.toString());
+            boardHistory.push(this.toString());
         }
+
+        executedMoves.push(move);
         changeTurns();
+    }
+
+    private void removeCastleRightAfterRookCapture(Rook capturedRook){
+        King kingWhoLosesRight = capturedRook.color == PieceColor.White ? whiteKing : blackKing;
+        if(capturedRook.onShortSide){
+            kingWhoLosesRight.canShortCastle = false;
+        }
+        else{
+            kingWhoLosesRight.canLongCastle = false;
+        }
+    }
+
+    private void removeCastleRightAfterRookMove(Rook movedRook){
+        King kingWhoLosesRight = movedRook.color == PieceColor.White ? whiteKing : blackKing;
+        if(movedRook.onShortSide){
+            kingWhoLosesRight.canShortCastle = false;
+        }
+        else{
+            kingWhoLosesRight.canLongCastle = false;
+        }
     }
 
     public static boolean insideBoard(int[] position){
         return position[0] >= 0 && position[0] <= 7 && position[1]  >= 0 && position[1] <= 7;
     }
 
-    Piece pieceAt(int[] coords){
+    Piece getPieceAt(int[] coords){
         return insideBoard(coords) ? position[coords[1]][coords[0]] : null;
     }
 
     boolean canLandOn(int[] coords, PieceColor moverColor){
-        return insideBoard(coords) && (pieceAt(coords) == null || pieceAt(coords).color != moverColor);
+        return insideBoard(coords) && (getPieceAt(coords) == null || getPieceAt(coords).color != moverColor);
     }
     boolean canCaptureSomethingAt(int[] coords, PieceColor moverColor){
-        return canLandOn(coords, moverColor) && pieceAt(coords) != null;
+        return canLandOn(coords, moverColor) && getPieceAt(coords) != null;
+    }
+    List<Move> getPossibleMoves(){
+        return possibleMovesInCurrentPosition;
+    }
+
+    public List<Move> getMovesOfSelectedPiece(Piece selectedPiece){
+        ArrayList<Move> movesOfSelectedPiece = new ArrayList<>();
+        for(Move move : getPossibleMoves()){
+            if(move.piece == selectedPiece){
+                movesOfSelectedPiece.add(move);
+            }
+        }
+        return movesOfSelectedPiece;
     }
     // get all moves the current player (whose turn) can currently make
-    List<Move> getPossibleMoves(){
-        ArrayList<Move> possibleMoves = new ArrayList<>();
+    void setPossibleMoves(FilterMode filterMode){
 
-        if(bulkUpdate){
-            bulkUpdate();
-        }
+        possibleMovesInCurrentPosition.clear();
 
-        for(int y = 0; y < 8; y++){
-            for(int x = 0; x < 8; x++){
-                if(position[y][x] != null && position[y][x].color == whoseTurn){
-                    possibleMoves.addAll(position[y][x].getPossibleMoves(bulkUpdate));
+        if(filterMode == FilterMode.Nothing) {
+            for (int y = 0; y < 8; y++) {
+                for (int x = 0; x < 8; x++) {
+                    if (position[y][x] != null && position[y][x].color == whoseTurn) {
+                        possibleMovesInCurrentPosition.addAll(position[y][x].getPossibleMoves());
+                    }
                 }
             }
         }
+        // filter out illegal moves
+        if(filterMode != FilterMode.Nothing){
 
-        return possibleMoves;
-    }
+            King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
 
-    void bulkUpdate(){
-        for(int y = 0; y < 8; y++){
-            for(int x = 0; x < 8; x++){
-                if(position[y][x] != null){
-                    position[y][x].x = x;
-                    position[y][x].y = y;
-                }
-            }
-        }
-    }
+            for (int y = 0; y < 8; y++) {
+                for (int x = 0; x < 8; x++) {
+                    if (position[y][x] != null && position[y][x].color == whoseTurn) {
+                        for(Move candidateMove : position[y][x].getPossibleMoves()){
 
-    Game getDeepCopy(){
-        boolean emptyPosition = true;
-        Game copiedGame = new Game(emptyPosition);
-
-        if(isOver()){
-            throw new RuntimeException("ERROR: copying a finished game!");
-        }
-
-        for(int y = 0; y < 8; y++){
-            for(int x = 0; x < 8; x++){
-                if(position[y][x] != null){
-                    Piece copiedPiece = position[y][x].getDeepCopy(copiedGame);
-                    copiedGame.position[y][x] = copiedPiece;
-
-                    // point to new kings
-                    if(copiedPiece instanceof King){
-                        if(copiedPiece.color == PieceColor.White){
-                            copiedGame.whiteKing = (King)copiedPiece;
-                        }
-                        else{
-                            copiedGame.blackKing = (King)copiedPiece;
+                            if(filterMode == FilterMode.AllMoves || (filterMode == FilterMode.OnlyCastlingMoves && candidateMove.isCastle())) {
+                                // getOppositeColor() has to be called before executeMove() since sides switch
+                                PieceColor oppositeColor = whoseTurn.getOppositeColor();
+                                executeMove(candidateMove);
+                                if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
+                                    possibleMovesInCurrentPosition.add(candidateMove);
+                                }
+                                undoLastMove();
+                            }
+                            // no filtering required
+                            else{
+                                possibleMovesInCurrentPosition.add(candidateMove);
+                            }
                         }
                     }
                 }
             }
         }
-        copiedGame.whoseTurn = whoseTurn;
-        copiedGame.debugOn = debugOn;
-        copiedGame.bulkUpdate = bulkUpdate;
-
-        if(debugOn) {
-            copiedGame.history = history;
-            copiedGame.boardHistory = boardHistory;
-        }
-        return copiedGame;
     }
 
     public String toString(){
@@ -316,5 +356,68 @@ public class Game {
     }
     boolean whiteWon(){
         return blackKing == null;
+    }
+
+    boolean isSquareAttackedBy(PieceColor color, int x, int y){
+        // check all diagonals
+        List<BiFunction<int[], Integer, int[]>> diagonals = List.of(getULDiagonal, getURDiagonal, getLLDiagonal, getLRDiagonal);
+        for(BiFunction<int[], Integer, int[]> getLocation : diagonals){
+            Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
+            if(firstPieceOnPath != null && firstPieceOnPath.color == color && canDiagonallyCapture(firstPieceOnPath, x, y)){
+                return true;
+            }
+        }
+        // check all lines
+        List<BiFunction<int[], Integer, int[]>> lines = List.of(getLeft, getRight, getUp, getDown);
+        for(BiFunction<int[], Integer, int[]> getLocation : lines){
+            Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
+            if(firstPieceOnPath != null && firstPieceOnPath.color == color && isStraightMovingPiece(firstPieceOnPath)){
+                return true;
+            }
+        }
+        // TODO: check knight moves
+        return false;
+    }
+
+    boolean canDiagonallyCapture(Piece piece, int x, int y){
+        if(piece instanceof Pawn){
+            int manhattenDistance = Math.abs(piece.x - x) + Math.abs(piece.y - y);
+            return manhattenDistance <= 1;
+        }else{
+            return piece instanceof Bishop || piece instanceof Queen;
+        }
+    }
+    boolean isStraightMovingPiece(Piece piece){
+        return piece instanceof Rook || piece instanceof Queen;
+    }
+    public BiFunction<int[], Integer, int[]> getULDiagonal = (pos, i) -> new int[]{pos[0] - i, pos[1] - i};
+    public BiFunction<int[], Integer, int[]> getURDiagonal = (pos, i) -> new int[]{pos[0] + i, pos[1] - i};
+    public BiFunction<int[], Integer, int[]> getLLDiagonal = (pos, i) -> new int[]{pos[0] - i, pos[1] + i};
+    public BiFunction<int[], Integer, int[]> getLRDiagonal = (pos, i) -> new int[]{pos[0] + i, pos[1] + i};
+    public BiFunction<int[], Integer, int[]> getLeft = (pos, i) -> new int[]{pos[0] - i, pos[1]};
+    public BiFunction<int[], Integer, int[]> getRight = (pos, i) -> new int[]{pos[0] + i, pos[1]};
+    public BiFunction<int[], Integer, int[]> getUp = (pos, i) -> new int[]{pos[0], pos[1] - i};
+    public BiFunction<int[], Integer, int[]> getDown = (pos, i) -> new int[]{pos[0], pos[1] + i};
+
+    public Piece getFirstPieceOnPath(int x, int y, BiFunction<int[], Integer, int[]> getLocation){
+        for(int i = 1;;i++){
+            int[] location = getLocation.apply(new int[]{x, y}, i);
+
+            if(!insideBoard(location)){
+                return null;
+            }
+            Piece pieceAtLocation = getPieceAt(location);
+            if(pieceAtLocation != null){
+                return pieceAtLocation;
+            }
+        }
+    }
+
+    ArrayList<Move> getDeepCopyOfMoves(){
+        ArrayList<Move> deepCopyOfMoves = new ArrayList<>();
+        for(Move move : getPossibleMoves()){
+            deepCopyOfMoves.add(move.getDeepCopy());
+        }
+        return deepCopyOfMoves;
     }
 }

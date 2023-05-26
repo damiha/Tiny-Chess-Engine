@@ -4,16 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Bishop extends Piece{
-    public Bishop(PieceColor color, Game game) {
-        super(color, game);
+    public Bishop(PieceColor color, int x, int y, Game game) {
+        super(color, x, y, game);
     }
 
     @Override
-    public List<Move> getPossibleMoves(boolean bulkUpdate) {
-
-        if(!bulkUpdate){
-            updatePosition();
-        }
+    public List<Move> getPossibleMoves() {
 
         ArrayList<Move> moves = new ArrayList<>();
 
@@ -31,8 +27,7 @@ public class Bishop extends Piece{
                         // capturing puts a stop to the bishops movement
                         if (game.canCaptureSomethingAt(endingPosition, color)) {
                             directionDone = true;
-                            move.captureValueDifference = Minimax.naivePieceValue(game.pieceAt(endingPosition)) - Minimax.naivePieceValue(this);
-                            move.isCapture = true;
+                            move.markAsCapture(game.getPieceAt(endingPosition));
                         }
                         moves.add(move);
                     }else{
@@ -43,11 +38,6 @@ public class Bishop extends Piece{
             }
         }
         return moves;
-    }
-
-    @Override
-    public Piece getDeepCopy(Game copiedGame) {
-        return new Bishop(color, copiedGame);
     }
 
     @Override

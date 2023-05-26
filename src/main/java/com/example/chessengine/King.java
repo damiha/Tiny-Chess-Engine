@@ -7,8 +7,8 @@ public class King extends Piece{
 
     boolean canShortCastle, canLongCastle;
     boolean hasCastled;
-    public King(PieceColor color, Game game) {
-        super(color, game);
+    public King(PieceColor color, int x, int y, Game game) {
+        super(color, x, y, game);
 
         canShortCastle = true;
         canLongCastle = true;
@@ -16,12 +16,8 @@ public class King extends Piece{
     }
 
     @Override
-    public List<Move> getPossibleMoves(boolean bulkUpdate) {
+    public List<Move> getPossibleMoves() {
 
-        // TODO: add checkmate detection and stop King from going there
-        if(!bulkUpdate) {
-            updatePosition();
-        }
         ArrayList<Move> moves = new ArrayList<>();
         // standard star moves
         int[][] deltas = {
@@ -40,40 +36,28 @@ public class King extends Piece{
             if(game.canLandOn(endingPosition, color)){
                 Move move = new Move(this, endingPosition);
                 if(game.canCaptureSomethingAt(endingPosition, color)){
-                    move.isCapture = true;
+                    move.markAsCapture(game.getPieceAt(endingPosition));
                 }
                 moves.add(move);
             }
         }
         // castling moves
         if(canShortCastle &&
-                game.pieceAt(new int[]{x + 1, y}) == null &&
-                game.pieceAt(new int[]{x + 2, y}) == null){
+                game.getPieceAt(new int[]{x + 1, y}) == null &&
+                game.getPieceAt(new int[]{x + 2, y}) == null){
             Move shortCastle = new Move(this, new int[]{x + 2, y});
             shortCastle.isShortCastle = true;
             moves.add(shortCastle);
         }
         if(canLongCastle &&
-                game.pieceAt(new int[]{x - 1, y}) == null &&
-                game.pieceAt(new int[]{x - 2, y}) == null &&
-                game.pieceAt(new int[]{x - 3, y}) == null){
+                game.getPieceAt(new int[]{x - 1, y}) == null &&
+                game.getPieceAt(new int[]{x - 2, y}) == null &&
+                game.getPieceAt(new int[]{x - 3, y}) == null){
             Move longCastle = new Move(this, new int[]{x - 2, y});
             longCastle.isLongCastle = true;
             moves.add(longCastle);
         }
         return moves;
-    }
-
-    @Override
-    public Piece getDeepCopy(Game copiedGame) {
-        King copiedKing = new King(color, copiedGame);
-        // position doesn't have to be copied over since updated
-        // castle rights have to be copied over
-        copiedKing.canLongCastle = canLongCastle;
-        copiedKing.canShortCastle = canShortCastle;
-        copiedKing.hasCastled = hasCastled;
-
-        return copiedKing;
     }
 
     @Override

@@ -4,16 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Knight extends Piece{
-    public Knight(PieceColor color, Game game) {
-        super(color, game);
+    public Knight(PieceColor color, int x, int y, Game game) {
+        super(color, x, y, game);
     }
 
     @Override
-    public List<Move> getPossibleMoves(boolean bulkUpdate) {
-
-        if(!bulkUpdate) {
-            updatePosition();
-        }
+    public List<Move> getPossibleMoves() {
 
         ArrayList<Move> moves = new ArrayList<>();
 
@@ -33,19 +29,13 @@ public class Knight extends Piece{
                 Move move = new Move(this, endingPosition);
 
                 if(game.canCaptureSomethingAt(endingPosition, color)){
-                    move.isCapture = true;
-                    move.captureValueDifference = Minimax.naivePieceValue(game.pieceAt(endingPosition)) - Minimax.naivePieceValue(this);
+                    move.markAsCapture(game.getPieceAt(endingPosition));
                 }
                 moves.add(move);
             }
         }
 
         return moves;
-    }
-
-    @Override
-    public Piece getDeepCopy(Game copiedGame) {
-        return new Knight(color, copiedGame);
     }
 
     @Override
