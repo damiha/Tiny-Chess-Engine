@@ -45,7 +45,13 @@ public class ManagementGUI {
             gc.fillText("Engine resigned!", x, y);
         }
         else{
-            gc.fillText(mainApplication.game.whiteWon() ? "White won!" : "Black won!", x, y);
+            String finalText = switch(mainApplication.game.getOutcome()){
+                case WhiteWon -> "White won!";
+                case BlackWon -> "Black won!";
+                case Stalemate -> "Stalemate!";
+                default -> throw new RuntimeException("Game is open so why final screen?");
+            };
+            gc.fillText(finalText, x, y);
         }
     }
 

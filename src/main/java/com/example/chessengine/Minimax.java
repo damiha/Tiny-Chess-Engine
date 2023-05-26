@@ -38,7 +38,7 @@ public class Minimax implements Runnable{
     Thread thread;
     boolean isFinished;
 
-    FilterMode filterMode = FilterMode.OnlyCastlingMoves;
+    FilterMode filterMode = FilterMode.AllMoves;
 
     boolean autoQueenActivated = true;
 

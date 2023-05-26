@@ -131,8 +131,9 @@ public class Move {
                 || (!pieceMove && piece instanceof Pawn);
     }
     public boolean matchesWithEndingPosition(String s){
-        int col = (s.charAt(s.length() - 2) - 'a');
-        int row = 7 - (s.charAt(s.length() -1) - '1');
+        int additionalSubtraction = s.charAt(s.length()-1) == '+' ? 1 : 0;
+        int col = (s.charAt(s.length() - 2 - additionalSubtraction) - 'a');
+        int row = 7 - (s.charAt(s.length() -1 - additionalSubtraction) - '1');
         return col == endingPosition[0] && row == endingPosition[1];
     }
 

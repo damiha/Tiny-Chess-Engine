@@ -11,14 +11,21 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
     double valueHavingCastled = 2.0;
     double valueSingleCastleRight = 0.5;
 
+    // the more pieces come off the board, the bigger the difference gets
+    double valueDifferenceSlope = 1.0 / 16.0;
+
     // telemetry
     int numberOfWhitePiecesInInnerCenter, numberOfWhitePiecesInOuterCenter;
     int numberOfBlackPiecesInInnerCenter, numberOfBlackPiecesInOuterCenter;
     int numberOfWhitePastPawns, numberOfBlackPastPawns;
+
+    // for exponential value difference
+    int piecesOnBoard;
     boolean whiteKingSideSafe, whiteQueenSideSafe;
     boolean blackKingSideSafe, blackQueenSideSafe;
 
     void resetStats(){
+        piecesOnBoard = 0;
         numberOfWhitePiecesInInnerCenter =  numberOfWhitePiecesInOuterCenter = numberOfWhitePastPawns = 0;
         numberOfBlackPiecesInInnerCenter =  numberOfBlackPiecesInOuterCenter = numberOfBlackPastPawns = 0;
         whiteKingSideSafe = whiteQueenSideSafe = true;
@@ -28,18 +35,22 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
 
         resetStats();
 
-        if(game.whiteWon()){
+        if(game.getOutcome() == Outcome.WhiteWon){
             return Integer.MAX_VALUE;
         }
-        else if(game.blackWon()){
+        else if(game.getOutcome() == Outcome.BlackWon){
             return Integer.MIN_VALUE;
         }
+        else if(game.getOutcome() == Outcome.Stalemate){
+            return 0;
+        }
         else{
-            // TODO: make this more nuanced
+            updateKingSafety(game);
             boolean positionalPlay = true;
             double castleRightEvaluation = getCastleRightValue(game.whiteKing) - getCastleRightValue(game.blackKing);
             double kingSafetyEvaluation = getKingSafetyValue(game.whiteKing) - getKingSafetyValue(game.blackKing);
-            return getPieceCount(game, positionalPlay)
+            int piecesOffBoard = 32 - piecesOnBoard;
+            return getPieceCount(game, positionalPlay) * getValueDifferenceFactor(piecesOffBoard)
                     + (numberOfWhitePiecesInInnerCenter - numberOfBlackPiecesInInnerCenter) * valueInnerCenter
                     + (numberOfWhitePiecesInOuterCenter - numberOfWhitePiecesInInnerCenter) * valueOuterCenter
                     + (numberOfWhitePastPawns - numberOfBlackPastPawns) * valuePastPawn
@@ -48,11 +59,52 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         }
     }
 
+    public double getValueDifferenceFactor(int piecesOffBoard){
+        return 1 + (piecesOffBoard * valueDifferenceSlope);
+    }
+
     double getCastleRightValue(King king){
-        return (king.canShortCastle ? valueSingleCastleRight : 0.0) + (king.canLongCastle ? valueSingleCastleRight : 0.0);
+        if(king.color == PieceColor.White){
+            return (king.canShortCastle && whiteKingSideSafe ? valueSingleCastleRight : 0)
+                    + (king.canLongCastle && whiteQueenSideSafe ? valueSingleCastleRight : 0);
+        }
+        else{
+            return (king.canShortCastle && blackKingSideSafe ? valueSingleCastleRight : 0)
+                    + (king.canLongCastle && blackQueenSideSafe ? valueSingleCastleRight : 0);
+        }
     }
     double getKingSafetyValue(King king){
-        return king.hasCastled ? valueHavingCastled : 0;
+        if(king.color == PieceColor.White){
+            return (king.hasCastledShort && whiteKingSideSafe)
+                    || (king.hasCastledLong && whiteQueenSideSafe) ? valueHavingCastled : 0;
+        }
+        else{
+            return (king.hasCastledShort && blackKingSideSafe)
+                    || (king.hasCastledLong && blackQueenSideSafe) ? valueHavingCastled : 0;
+        }
+    }
+
+    void updateKingSafety(Game game){
+
+        whiteKingSideSafe = isKingProtectedOnFile(game, PieceColor.White, 'g')
+                && isKingProtectedOnFile(game, PieceColor.White, 'h');
+        whiteQueenSideSafe = isKingProtectedOnFile(game, PieceColor.White, 'a')
+                && isKingProtectedOnFile(game, PieceColor.White, 'b')
+                && isKingProtectedOnFile(game, PieceColor.White, 'c');
+        blackKingSideSafe = isKingProtectedOnFile(game, PieceColor.Black, 'g')
+                && isKingProtectedOnFile(game, PieceColor.Black, 'h');
+        blackQueenSideSafe = isKingProtectedOnFile(game, PieceColor.Black, 'a')
+                && isKingProtectedOnFile(game, PieceColor.Black, 'b')
+                && isKingProtectedOnFile(game, PieceColor.Black, 'c');
+    }
+    boolean isKingProtectedOnFile(Game game, PieceColor color, char file){
+
+        int pawnRow = (color == PieceColor.White ? 6 : 1);
+        int direction = (color == PieceColor.White ? -1 : 1);
+        int fileNum = Character.toLowerCase(file) - 'a';
+
+        return game.getPieceAt(new int[]{fileNum, pawnRow}) instanceof Pawn
+                || game.getPieceAt(new int[]{fileNum, pawnRow + direction}) instanceof  Pawn;
     }
 
     public void updatePositionalValue(Game game, Piece piece, int x, int y){
@@ -138,17 +190,17 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         for(int y = 0; y < 8; y++){
             for(int x = 0; x < 8; x++){
                 if(game.position[y][x] != null){
+
+                    piecesOnBoard += 1;
+
                     if(game.position[y][x].color == PieceColor.White){
                         count += getPieceValue(game.position[y][x]);
-                        if(positionalPlay) {
-                            updatePositionalValue(game, game.position[y][x], x, y);
-                        }
                     }
                     else{
                         count -= getPieceValue(game.position[y][x]);
-                        if(positionalPlay){
-                            updatePositionalValue(game, game.position[y][x], x,y);
-                        }
+                    }
+                    if(positionalPlay) {
+                        updatePositionalValue(game, game.position[y][x], x, y);
                     }
                 }
             }
@@ -161,6 +213,8 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
                 String.format("Pieces in outer center: %d (w), %d (b)\n", numberOfWhitePiecesInOuterCenter, numberOfBlackPiecesInOuterCenter) +
                 String.format("Past pawns: %d (w), %d (b)\n", numberOfWhitePastPawns, numberOfBlackPastPawns) +
                 String.format("King side safe: %b (w), %b (b)\n", whiteKingSideSafe, blackKingSideSafe) +
-                String.format("Queen side safe: %b (w), %b (b)\n", whiteQueenSideSafe, blackQueenSideSafe);
+                String.format("Queen side safe: %b (w), %b (b)\n", whiteQueenSideSafe, blackQueenSideSafe) +
+                String.format("Pieces taken: %d\n", 32 - piecesOnBoard) +
+                String.format("Value difference factor: %.3f\n", getValueDifferenceFactor(32 - piecesOnBoard));
     }
 }

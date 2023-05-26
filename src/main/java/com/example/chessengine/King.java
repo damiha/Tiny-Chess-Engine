@@ -6,13 +6,13 @@ import java.util.List;
 public class King extends Piece{
 
     boolean canShortCastle, canLongCastle;
-    boolean hasCastled;
+    boolean hasCastledShort, hasCastledLong;
     public King(PieceColor color, int x, int y, Game game) {
         super(color, x, y, game);
 
         canShortCastle = true;
         canLongCastle = true;
-        hasCastled = false;
+        hasCastledShort = hasCastledLong = false;
     }
 
     @Override

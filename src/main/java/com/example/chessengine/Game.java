@@ -29,6 +29,8 @@ public class Game {
     boolean enPassantEnabled = true;
     ArrayList<Move> possibleMovesInCurrentPosition;
 
+    Outcome outcome;
+
     public Game(){
         position = getStartingPosition();
         whoseTurn = PieceColor.White;
@@ -43,6 +45,8 @@ public class Game {
 
         possibleMovesInCurrentPosition = new ArrayList<>();
         setPossibleMoves(FilterMode.AllMoves);
+
+        outcome = Outcome.Open;
     }
 
     Piece[] getPieceRow(PieceColor color){
@@ -119,6 +123,8 @@ public class Game {
                 boardHistory.pop();
                 history.pop();
             }
+            // if a move was executed, game must have been open beforehand
+            outcome = Outcome.Open;
             changeTurns();
         }
     }
@@ -140,12 +146,16 @@ public class Game {
             movePiece(new int[]{6, kingRow}, new int[]{4, kingRow});
             // move rook
             movePiece(new int[]{5, kingRow}, new int[]{7, kingRow});
+
+            kingWhoCastled.hasCastledShort = false;
         }
         else{
             // move king
             movePiece(new int[]{2, kingRow}, new int[]{4, kingRow});
             // move rook
             movePiece(new int[]{3, kingRow}, new int[]{0, kingRow});
+
+            kingWhoCastled.hasCastledLong = false;
         }
     }
 
@@ -197,12 +207,16 @@ public class Game {
             movePiece(new int[]{4, kingRow}, new int[]{6, kingRow});
             // move rook
             movePiece(new int[]{7, kingRow}, new int[]{5, kingRow});
+
+            kingWhoCastled.hasCastledShort = true;
         }
         else{
             // move king
             movePiece(new int[]{4, kingRow}, new int[]{2, kingRow});
             // move rook
             movePiece(new int[]{0, kingRow}, new int[]{3, kingRow});
+
+            kingWhoCastled.hasCastledLong = true;
         }
     }
     void executeMove(Move move){
@@ -340,7 +354,21 @@ public class Game {
                     }
                 }
             }
+            // either checkmate or stalemate
+            if(possibleMovesInCurrentPosition.isEmpty()){
+                // checkmate
+                if(isSquareAttackedBy(whoseTurn.getOppositeColor(), kingToBeProtected.x, kingToBeProtected.y)){
+                    outcome = (whoseTurn.getOppositeColor() == PieceColor.Black ? Outcome.BlackWon : Outcome.WhiteWon);
+                }
+                else{
+                    outcome = Outcome.Stalemate;
+                }
+            }
         }
+    }
+
+    public Outcome getOutcome(){
+        return outcome;
     }
 
     public String toString(){
@@ -364,16 +392,9 @@ public class Game {
         whoseTurn = whoseTurn == PieceColor.White ? PieceColor.Black : PieceColor.White;
     }
 
-    // TODO: detect stale mate, no one can move anymore
     boolean isOver(){
         // kings can be captured as of now
-        return whiteWon() || blackWon();
-    }
-    boolean blackWon(){
-        return whiteKing == null;
-    }
-    boolean whiteWon(){
-        return blackKing == null;
+        return outcome != Outcome.Open;
     }
 
     boolean isSquareAttackedBy(PieceColor color, int x, int y){
@@ -530,6 +551,7 @@ public class Game {
                     executeMoveAndSet(movesMatchingWithString.get(0));
                 }
                 else{
+                    System.out.println(line);
                     throw new RuntimeException("Move could not be parsed");
                 }
             }
