@@ -54,7 +54,7 @@ public class ManagementGUI {
         gc.setFill(Color.BLACK);
 
         if(mainApplication.humanVsComputer) {
-            gc.fillText("Press [W]/[B] to choose the perspective of the computer player!", x, y);
+            gc.fillText("Press [W]/[B] to choose the perspective of the human player!", x, y);
         }
         else{
             gc.fillText("Press [W]/[B] to choose the perspective!", x + 100, y);
@@ -66,6 +66,6 @@ public class ManagementGUI {
         int y = windowHeight / 2;
 
         gc.setFill(Color.BLACK);
-        gc.fillText("Human vs Human - [H]\n\nHuman vs Computer - [C]", x, y);
+        gc.fillText("Human vs Human - [H]\n\nHuman vs Computer - [C]\n\nLoad PGN - [L]", x, y);
     }
 }

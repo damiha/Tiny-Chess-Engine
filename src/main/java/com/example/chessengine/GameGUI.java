@@ -162,6 +162,16 @@ public class GameGUI {
         }
     }
 
+    public void clearPanel(){
+        gc.setFill(Color.WHITE);
+        gc.fillRect(panelX, panelY, panelWidth, panelHeight);
+    }
+
+    public void clearGameScreen(){
+        gc.setFill(Color.WHITE);
+        gc.fillRect(0, 0, panelX, panelY);
+    }
+
     public boolean isInsideBoard(int mouseX, int mouseY){
         return mouseX >= offsetX && mouseX <= (offsetX + boardSideLength)
                 && mouseY >= offsetY && mouseY <= (offsetY + boardSideLength);

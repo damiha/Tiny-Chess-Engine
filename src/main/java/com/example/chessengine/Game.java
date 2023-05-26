@@ -1,10 +1,15 @@
 package com.example.chessengine;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Stack;
 import java.util.function.BiFunction;
+import java.util.stream.Stream;
 
 public class Game {
 
@@ -306,8 +311,18 @@ public class Game {
                         for(Move candidateMove : position[y][x].getPossibleMoves()){
 
                             if(filterMode == FilterMode.AllMoves || (filterMode == FilterMode.OnlyCastlingMoves && candidateMove.isCastle())) {
-                                // getOppositeColor() has to be called before executeMove() since sides switch
+
                                 PieceColor oppositeColor = whoseTurn.getOppositeColor();
+
+                                // can't castle out of check, through check, immediately discard those
+                                if(candidateMove.isCastle()){
+                                    if(isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y) ||
+                                            (candidateMove.isShortCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x + 1, kingToBeProtected.y))
+                                        || (candidateMove.isLongCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x - 1, kingToBeProtected.y))){
+                                        continue;
+                                    }
+                                }
+                                // getOppositeColor() has to be called before executeMove() since sides switch
                                 executeMove(candidateMove);
                                 if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
                                     possibleMovesInCurrentPosition.add(candidateMove);
@@ -413,11 +428,139 @@ public class Game {
         }
     }
 
+
+
     ArrayList<Move> getDeepCopyOfMoves(){
         ArrayList<Move> deepCopyOfMoves = new ArrayList<>();
         for(Move move : getPossibleMoves()){
             deepCopyOfMoves.add(move.getDeepCopy());
         }
         return deepCopyOfMoves;
+    }
+    // TODO: extend this
+    public void loadFromPGN(File file){
+        try {
+            List<String> lines = Files.lines(file.toPath()).toList();
+            List<String> linesOfFirstGame = new ArrayList<>();
+            boolean foundBeginning = false;
+            for(String line : lines){
+                if(line.startsWith("1")){
+                    foundBeginning = true;
+                }
+
+                if(foundBeginning && line.isBlank()){
+                    break;
+                }
+                else if(foundBeginning){
+                    linesOfFirstGame.add(line);
+                }
+            }
+            linesOfFirstGame = linesOfFirstGame
+                    .stream()
+                    .flatMap(s -> Arrays.stream(s.split(" "))).toList();
+
+            for(String line : linesOfFirstGame){
+                if(line.isBlank()){
+                    break;
+                }
+                if(line.contains(".")){
+                    line = line.split("\\.")[1];
+                }
+                List<Move> movesMatchingWithString = new ArrayList<>();
+                // play all moves
+                for(Move move : getPossibleMoves()){
+                    if(move.matchesWith(line)){
+                        movesMatchingWithString.add(move);
+                    }
+                }
+                // there can be multiple moves that match (when two pieces of same type can reach same square
+                if(movesMatchingWithString.size() > 1){
+
+                    // 1. file of departure (if they differ)
+                    if(allDifferentFiles(movesMatchingWithString)){
+
+                        char departureFile = getDepartureFile(line);
+
+                        for(Move matchingMove : movesMatchingWithString){
+                            if(matchingMove.departureFromFile(departureFile)){
+                                executeMoveAndSet(matchingMove);
+                                break;
+                            }
+                        }
+                    }
+                    // 2. rank of departure (file or rank must differ otherwise on same square)
+                    else if(allDifferentRanks(movesMatchingWithString)){
+
+                        char departureRank = getDepartureRank(line);
+
+                        for(Move matchingMove : movesMatchingWithString){
+                            if(matchingMove.departureFromRank(departureRank)){
+                                executeMoveAndSet(matchingMove);
+                                break;
+                            }
+                        }
+                    }
+                    // TODO: can be that giving rank or file is not enough (three queens in a triangle)
+                    // TODO: do this another time
+                }
+                else if(movesMatchingWithString.size() == 1){
+                    executeMoveAndSet(movesMatchingWithString.get(0));
+                }
+                else{
+                    throw new RuntimeException("Move could not be parsed");
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void executeMoveAndSet(Move move){
+        executeMove(move);
+        setPossibleMoves(FilterMode.AllMoves);
+    }
+
+    public boolean allDifferentFiles(List<Move> moves){
+        int file = moves.get(0).piece.x;
+        for(int i = 1; i < moves.size(); i++){
+            // at least two have same file
+            if(moves.get(i).piece.x == file){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public boolean allDifferentRanks(List<Move> moves){
+        int rank = moves.get(0).piece.y;
+        for(int i = 1; i < moves.size(); i++){
+            // at least two have same file
+            if(moves.get(i).piece.y == rank){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    char getDepartureFile(String line){
+        char file = 0;
+        for(char c : line.toCharArray()){
+            if(Character.isLowerCase(c)){
+                file = c;
+                break;
+            }
+        }
+        return file;
+    }
+
+    char getDepartureRank(String line){
+        char rank = 0;
+        for(char c : line.toCharArray()){
+            if(Character.isDigit(c)){
+                rank = c;
+                break;
+            }
+        }
+        return rank;
     }
 }

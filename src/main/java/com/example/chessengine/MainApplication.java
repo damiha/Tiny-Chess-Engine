@@ -8,8 +8,10 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.input.KeyCode;
 import javafx.scene.paint.Color;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.io.File;
 import java.util.List;
 import java.util.function.Function;
 
@@ -27,7 +29,7 @@ public class MainApplication extends Application {
     Piece[][] positionToDisplay;
 
     // otherwise flip board and let computer make first move
-    boolean humanStarts = true;
+    PieceColor humanPlays;
     // prevent engine from running immediately
     boolean screenDrawnSinceMove = false;
 
@@ -61,6 +63,10 @@ public class MainApplication extends Application {
     PieceColor turnToDisplay;
     String whiteCastleRightString, blackCastleRightString;
 
+    boolean isOneTimeEngineMove = false;
+
+    boolean statisticsHaveChanged = true;
+
     @Override
     public void start(Stage stage) {
 
@@ -91,9 +97,8 @@ public class MainApplication extends Application {
         new AnimationTimer() {
             public void handle(long currentNanoTime) {
 
-                clearScreen(gc);
-
                 if(!isInGame()){
+                    clearEntireScreen(gc);
                     managementGUI.draw();
                 }
 
@@ -119,13 +124,24 @@ public class MainApplication extends Application {
                             minimax.stop();
                             minimax = null;
 
+                            if(isOneTimeEngineMove){
+                                humanVsComputer = false;
+                            }
+
                             isPieceSelected = false;
                             selectedPiece = null;
                         }
                     }
-
+                    // when play against computer, only refresh when its humans turn
+                    if(!humanVsComputer || minimax == null) {
+                        gameGUI.clearGameScreen();
+                    }
                     drawGame();
-                    gameGUI.drawPanel(getPanelInformation());
+                    if(statisticsHaveChanged) {
+                        gameGUI.clearPanel();
+                        gameGUI.drawPanel(getPanelInformation());
+                        statisticsHaveChanged = false;
+                    }
                     screenDrawnSinceMove = true;
                 }
             }
@@ -144,14 +160,30 @@ public class MainApplication extends Application {
                     humanVsComputer = true;
                     modeChosen = true;
                 }
+                else if(event.getCode() == KeyCode.L){
+                    humanVsComputer = false;
+                    modeChosen = true;
+
+                    FileChooser fileChooser = new FileChooser();
+                    fileChooser.setTitle("Load Single PGN game");
+                    File file = fileChooser.showOpenDialog(stage);
+                    if(file != null){
+                        game.loadFromPGN(file);
+                        updatePositionToDisplay();
+                    }
+
+                    // always analyse loaded position from white's perspective
+                    humanPlays = PieceColor.White;
+                    sideChosen = true;
+                }
             }
             if(!sideChosen){
                 if(event.getCode() == KeyCode.W){
-                    humanStarts = false;
+                    humanPlays = PieceColor.White;
                     sideChosen = true;
                 }
                 else if(event.getCode() == KeyCode.B){
-                    humanStarts = true;
+                    humanPlays = PieceColor.Black;
                     sideChosen = true;
                 }
             }
@@ -168,6 +200,11 @@ public class MainApplication extends Application {
                      game.undoLastMove();
                      game.setPossibleMoves(FilterMode.AllMoves);
                      updatePositionToDisplay();
+                 }
+                 if(event.getCode() == KeyCode.E){
+                    humanVsComputer = true;
+                    humanPlays = game.whoseTurn.getOppositeColor();
+                    isOneTimeEngineMove = true;
                  }
             }
         });
@@ -187,6 +224,8 @@ public class MainApplication extends Application {
         positionsEvaluatedPerSecond = minimax.positionsEvaluatedPerSecond;
         cutoffReached = minimax.cutoffReached;
         bestValue = minimax.bestValue;
+
+        statisticsHaveChanged = true;
         return null;
     };
 
@@ -195,11 +234,14 @@ public class MainApplication extends Application {
         if(gameGUI.perspective == null){
             gameGUI.setPerspective(isPerspectiveFlipped() ? PieceColor.Black : PieceColor.White);
         }
-        gameGUI.drawCheckerBoard();
-        gameGUI.drawPosition(positionToDisplay);
+        // only draw when humans turn, minimax needs full power
+        if(!humanVsComputer || minimax == null) {
+            gameGUI.drawCheckerBoard();
+            gameGUI.drawPosition(positionToDisplay);
 
-        if(minimax == null && isPieceSelected){
-            gameGUI.drawMovesOfSelectedPiece(game.getMovesOfSelectedPiece(selectedPiece));
+            if (minimax == null && isPieceSelected) {
+                gameGUI.drawMovesOfSelectedPiece(game.getMovesOfSelectedPiece(selectedPiece));
+            }
         }
     }
 
@@ -220,13 +262,13 @@ public class MainApplication extends Application {
         return modeChosen && sideChosen && !game.isOver();
     }
 
-    private void clearScreen(GraphicsContext gc){
+    private void clearEntireScreen(GraphicsContext gc){
         gc.setFill(Color.WHITE);
         gc.fillRect(0, 0, windowWidth, windowHeight);
     }
 
     boolean isHumansTurn(){
-        return (humanStarts && game.whoseTurn == PieceColor.White) || (!humanStarts && game.whoseTurn == PieceColor.Black);
+        return game.whoseTurn == humanPlays;
     }
     void selectionAndMovement(int mouseX, int mouseY) {
         if (gameGUI.isInsideBoard(mouseX, mouseY)) {
@@ -275,7 +317,7 @@ public class MainApplication extends Application {
     }
 
     boolean isPerspectiveFlipped(){
-        return humanStarts;
+        return (humanVsComputer && humanPlays == PieceColor.White) || (!humanVsComputer && humanPlays == PieceColor.Black);
     }
 
     private String[] getPanelInformation(){
@@ -304,6 +346,7 @@ public class MainApplication extends Application {
                 "----",
                 "[SPACE] to switch sides",
                 "[U] to undo move",
+                "[E] to start engine",
                 engineResigned ? "Engine resigned!" : ""
         };
     }

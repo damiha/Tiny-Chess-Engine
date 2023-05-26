@@ -70,8 +70,8 @@ public class Pawn extends Piece{
         // en passant
         if(game.enPassantEnabled && !game.executedMoves.isEmpty()){
             Move lastMove = game.executedMoves.peek();
-            // two step move to same height
-            if(lastMove.isTwoStepPawnMove && lastMove.endingPosition[1] == y){
+            // two step move to same height and directly on left or on right
+            if(lastMove.isTwoStepPawnMove && lastMove.endingPosition[1] == y && Math.abs(lastMove.endingPosition[0] - x) <= 1){
                 Move enPassantCapture = new Move(this, new int[]{lastMove.endingPosition[0], y + direction});
                 enPassantCapture.markAsEnPassantCapture(lastMove.piece);
                 moves.add(enPassantCapture);

@@ -43,7 +43,7 @@ public class Move {
         String startingPositionString = toLetter(startingPosition[0]) + ", " + toChessRow(startingPosition[1]);
         String endingPositionString = toLetter(endingPosition[0]) + ", " + toChessRow(endingPosition[1]);
 
-        return piece + ": " + startingPositionString + " --> " + endingPositionString;
+        return piece + ": " + startingPositionString + " --> " + endingPositionString + (isCapture ? ", capture" : "");
     }
 
     public void markAsEnPassantCapture(Piece capturedPiece){
@@ -111,5 +111,38 @@ public class Move {
         }
 
         return deepCopy;
+    }
+
+    public boolean matchesWith(String s){
+        return isShortCastle && s.equals("O-O")
+                || isLongCastle && s.equals("O-O-O")
+                || (matchesWithPiece(s) && matchesWithEndingPosition(s) && matchesWithCapture(s));
+    }
+
+    public boolean matchesWithPiece(String s){
+        boolean pieceMove = Character.isUpperCase(s.charAt(0));
+        return  (pieceMove && (piece instanceof Knight && s.contains("N")
+                || piece instanceof Bishop && s.contains("B")
+                || piece instanceof Rook && s.contains("R")
+                || piece instanceof Queen && s.contains("Q")
+                || piece instanceof King && s.contains("K")))
+                || (!pieceMove && piece instanceof Pawn);
+    }
+    public boolean matchesWithEndingPosition(String s){
+        int col = (s.charAt(s.length() - 2) - 'a');
+        int row = 7 - (s.charAt(s.length() -1) - '1');
+        return col == endingPosition[0] && row == endingPosition[1];
+    }
+
+    public boolean matchesWithCapture(String s){
+        return isCapture == s.contains("x");
+    }
+
+    public boolean departureFromFile(char file){
+        return piece.x == (file - 'a');
+    }
+
+    public boolean departureFromRank(char rank){
+        return piece.y == (7 - (rank - '1'));
     }
 }
