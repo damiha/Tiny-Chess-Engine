@@ -3,10 +3,30 @@ package com.example.chessengine;
 public class FeatureBasedEvaluationMethod extends EvaluationMethod {
 
     // TODO: later make possible to load in from file for PSO optimization
-    public FeatureBasedEvaluationMethod(){
 
+    // hyperparameters
+    double valueInnerCenter = 0.5;
+    double valueOuterCenter = 0.25;
+    double valuePastPawn = 1.0;
+    double valueHavingCastled = 2.0;
+    double valueSingleCastleRight = 0.5;
+
+    // telemetry
+    int numberOfWhitePiecesInInnerCenter, numberOfWhitePiecesInOuterCenter;
+    int numberOfBlackPiecesInInnerCenter, numberOfBlackPiecesInOuterCenter;
+    int numberOfWhitePastPawns, numberOfBlackPastPawns;
+    boolean whiteKingSideSafe, whiteQueenSideSafe;
+    boolean blackKingSideSafe, blackQueenSideSafe;
+
+    void resetStats(){
+        numberOfWhitePiecesInInnerCenter =  numberOfWhitePiecesInOuterCenter = numberOfWhitePastPawns = 0;
+        numberOfBlackPiecesInInnerCenter =  numberOfBlackPiecesInOuterCenter = numberOfBlackPastPawns = 0;
+        whiteKingSideSafe = whiteQueenSideSafe = true;
+        blackKingSideSafe = blackQueenSideSafe = true;
     }
     public double staticEvaluation(Game game){
+
+        resetStats();
 
         if(game.whiteWon()){
             return Integer.MAX_VALUE;
@@ -19,39 +39,75 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
             boolean positionalPlay = true;
             double castleRightEvaluation = getCastleRightValue(game.whiteKing) - getCastleRightValue(game.blackKing);
             double kingSafetyEvaluation = getKingSafetyValue(game.whiteKing) - getKingSafetyValue(game.blackKing);
-            return getPieceCount(game, positionalPlay) + castleRightEvaluation + kingSafetyEvaluation;
+            return getPieceCount(game, positionalPlay)
+                    + (numberOfWhitePiecesInInnerCenter - numberOfBlackPiecesInInnerCenter) * valueInnerCenter
+                    + (numberOfWhitePiecesInOuterCenter - numberOfWhitePiecesInInnerCenter) * valueOuterCenter
+                    + (numberOfWhitePastPawns - numberOfBlackPastPawns) * valuePastPawn
+                    + castleRightEvaluation
+                    + kingSafetyEvaluation;
         }
     }
 
     double getCastleRightValue(King king){
-        return (king.canShortCastle ? 0.5 : 0.0) + (king.canLongCastle ? 0.5 : 0.0);
+        return (king.canShortCastle ? valueSingleCastleRight : 0.0) + (king.canLongCastle ? valueSingleCastleRight : 0.0);
     }
     double getKingSafetyValue(King king){
-        return king.hasCastled ? +2 : 0;
+        return king.hasCastled ? valueHavingCastled : 0;
     }
 
-    static double getPositionalValueOfPiece(Piece piece, int x, int y){
-        double totalValue = 0.0;
+    public void updatePositionalValue(Game game, Piece piece, int x, int y){
 
         // pawns that are closer to finish line get points - max +1
-        if(piece instanceof Pawn){
+        if(piece instanceof Pawn && isPastPawn(game, piece, x, y)){
             if(piece.color == PieceColor.White){
-                totalValue += 3.0 - y / 2.0;
-            }
-            else{
-                totalValue += 3.0 - (7-y) / 2.0;
+                numberOfWhitePastPawns += 1;
+            }else{
+                numberOfBlackPastPawns += 1;
             }
         }
-        // pieces in the center get extra points, max +1
-        // apart from king
-        if(!(piece instanceof King)) {
+        // minor pieces in the center get extra points
+        if(isPawnOrMinorPiece(piece)) {
             if ((x == 3 || x == 4) && (y == 3 || y == 4)) {
-                totalValue += 1.0;
-            } else if ((x >= 2 && x <= 5) || (y >= 2 && y <= 5)) {
-                totalValue += 0.5;
+
+                if(piece.color == PieceColor.White){
+                    numberOfWhitePiecesInInnerCenter += 1;
+                }
+                else{
+                    numberOfBlackPiecesInInnerCenter += 1;
+                }
+            } else if ((x >= 2 && x <= 5) && (y >= 2 && y <= 5)) {
+
+                if(piece.color == PieceColor.White){
+                    numberOfWhitePiecesInOuterCenter += 1;
+                }
+                else{
+                    numberOfBlackPiecesInOuterCenter += 1;
+                }
             }
         }
-        return totalValue;
+    }
+
+    boolean isPawnOrMinorPiece(Piece piece){
+        return piece instanceof Pawn || piece instanceof Bishop || piece instanceof Knight;
+    }
+
+    boolean isPastPawn(Game game, Piece piece, int x, int y){
+        int direction = piece.color == PieceColor.White ? -1 : 1;
+        for(int i = 1;; i++){
+            int rankChecked = y + i * direction;
+            if(rankChecked < 0 || rankChecked > 7){
+                return true;
+            }
+            // pawns left or right?
+            Piece pieceToLeft = game.getPieceAt(new int[]{x - 1, rankChecked});
+            if(pieceToLeft instanceof Pawn && pieceToLeft.color == piece.color.getOppositeColor()){
+                return false;
+            }
+            Piece pieceToRight = game.getPieceAt(new int[]{x + 1, rankChecked});
+            if(pieceToRight instanceof Pawn && pieceToRight.color == piece.color.getOppositeColor()){
+                return false;
+            }
+        }
     }
 
     static int getPieceValue(Piece piece){
@@ -85,18 +141,26 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
                     if(game.position[y][x].color == PieceColor.White){
                         count += getPieceValue(game.position[y][x]);
                         if(positionalPlay) {
-                            count += getPositionalValueOfPiece(game.position[y][x], x, y);
+                            updatePositionalValue(game, game.position[y][x], x, y);
                         }
                     }
                     else{
                         count -= getPieceValue(game.position[y][x]);
                         if(positionalPlay){
-                            count -= getPositionalValueOfPiece(game.position[y][x], x,y);
+                            updatePositionalValue(game, game.position[y][x], x,y);
                         }
                     }
                 }
             }
         }
         return count;
+    }
+    @Override
+    public String getSummary(){
+        return String.format("Pieces in inner center: %d (w), %d (b)\n", numberOfWhitePiecesInInnerCenter, numberOfBlackPiecesInInnerCenter) +
+                String.format("Pieces in outer center: %d (w), %d (b)\n", numberOfWhitePiecesInOuterCenter, numberOfBlackPiecesInOuterCenter) +
+                String.format("Past pawns: %d (w), %d (b)\n", numberOfWhitePastPawns, numberOfBlackPastPawns) +
+                String.format("King side safe: %b (w), %b (b)\n", whiteKingSideSafe, blackKingSideSafe) +
+                String.format("Queen side safe: %b (w), %b (b)\n", whiteQueenSideSafe, blackQueenSideSafe);
     }
 }

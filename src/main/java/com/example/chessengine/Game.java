@@ -150,6 +150,9 @@ public class Game {
     }
 
     void placePieceAt(Piece piece, int[] destination){
+        if(piece != null) {
+            piece.setPosition(destination);
+        }
         position[destination[1]][destination[0]] = piece;
     }
 
@@ -166,10 +169,10 @@ public class Game {
     }
     void updateCastleRights(Move move){
         // rook is captured - castling right is lost
-        if(move.isCapture() && move.getCapturedPiece() instanceof Rook capturedRook){
+        if(move.isCapture() && move.getCapturedPiece() instanceof Rook capturedRook && !capturedRook.createdThroughPromotion){
             removeCastleRightAfterRookCapture(capturedRook);
         }
-        if(move.piece instanceof Rook movedRook){
+        if(move.piece instanceof Rook movedRook && !movedRook.createdThroughPromotion){
             removeCastleRightAfterRookMove(movedRook);
         }
         // when king moves, both castling rights are taken away
@@ -390,14 +393,23 @@ public class Game {
                 return true;
             }
         }
-        // TODO: check knight moves
+        // check knight moves
+        for(int i = 0; i < 8; i++){
+            int[] location = getKnightMoves.apply(new int[]{x, y}, i);
+            Piece pieceAtLocation = getPieceAt(location);
+
+            if(pieceAtLocation != null && pieceAtLocation.color == color && pieceAtLocation instanceof Knight){
+                return true;
+            }
+        }
         return false;
     }
 
     boolean canDiagonallyCapture(Piece piece, int x, int y){
         if(piece instanceof Pawn){
-            int manhattenDistance = Math.abs(piece.x - x) + Math.abs(piece.y - y);
-            return manhattenDistance <= 1;
+            boolean pawnNextToKing = Math.abs(piece.x - x) == 1;
+            boolean kingInFrontOfPawn = piece.color == PieceColor.White ? y < piece.y : y > piece.y;
+            return pawnNextToKing && kingInFrontOfPawn;
         }else{
             return piece instanceof Bishop || piece instanceof Queen;
         }
@@ -414,6 +426,20 @@ public class Game {
     public BiFunction<int[], Integer, int[]> getUp = (pos, i) -> new int[]{pos[0], pos[1] - i};
     public BiFunction<int[], Integer, int[]> getDown = (pos, i) -> new int[]{pos[0], pos[1] + i};
 
+    public BiFunction<int[], Integer, int[]> getKnightMoves = (pos, i) -> {
+        i = i % 8;
+        return switch(i){
+            case 0 -> new int[]{pos[0] - 1, pos[1] - 2};
+            case 1 -> new int[]{pos[0] + 1, pos[1] - 2};
+            case 2 -> new int[]{pos[0] + 2, pos[1] - 1};
+            case 3 -> new int[]{pos[0] + 2, pos[1] + 1};
+            case 4 -> new int[]{pos[0] + 1, pos[1] + 2};
+            case 5 -> new int[]{pos[0] - 1, pos[1] + 2};
+            case 6 -> new int[]{pos[0] - 2, pos[1] + 1};
+            default -> new int[]{pos[0] -2, pos[1] - 1};
+        };
+    };
+
     public Piece getFirstPieceOnPath(int x, int y, BiFunction<int[], Integer, int[]> getLocation){
         for(int i = 1;;i++){
             int[] location = getLocation.apply(new int[]{x, y}, i);
@@ -427,9 +453,6 @@ public class Game {
             }
         }
     }
-
-
-
     ArrayList<Move> getDeepCopyOfMoves(){
         ArrayList<Move> deepCopyOfMoves = new ArrayList<>();
         for(Move move : getPossibleMoves()){

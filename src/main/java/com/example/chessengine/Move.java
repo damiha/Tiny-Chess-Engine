@@ -43,7 +43,9 @@ public class Move {
         String startingPositionString = toLetter(startingPosition[0]) + ", " + toChessRow(startingPosition[1]);
         String endingPositionString = toLetter(endingPosition[0]) + ", " + toChessRow(endingPosition[1]);
 
-        return piece + ": " + startingPositionString + " --> " + endingPositionString + (isCapture ? ", capture" : "");
+        return piece + ": " + startingPositionString + " --> " + endingPositionString
+                + (isCapture ? ", capture" : "")
+                + (isPromotion ? ", promotion to " + promotedTo : "");
     }
 
     public void markAsEnPassantCapture(Piece capturedPiece){

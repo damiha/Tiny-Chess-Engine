@@ -42,6 +42,8 @@ public class MainApplication extends Application {
     int cutoffReached = 0;
     double bestValue = 0.0;
 
+    FilterMode minimaxFilterMode;
+
     Minimax minimax = null;
 
     boolean engineResigned = false;
@@ -67,6 +69,16 @@ public class MainApplication extends Application {
 
     boolean statisticsHaveChanged = true;
 
+    boolean autoQueenActivated;
+
+    // when human promotes, we have to ask to which piece?
+    boolean suspendedByPromotion = false;
+    Move pendingMove = null;
+
+    // for analysis
+    EvaluationMethod evaluationMethod;
+    String evaluationSummary = "";
+
     @Override
     public void start(Stage stage) {
 
@@ -76,6 +88,7 @@ public class MainApplication extends Application {
         gc = canvas.getGraphicsContext2D();
 
         game = new Game();
+        evaluationMethod = new FeatureBasedEvaluationMethod();
         positionToDisplay = new Piece[8][8];
         updatePositionToDisplay();
 
@@ -107,7 +120,6 @@ public class MainApplication extends Application {
                         if (!isHumansTurn() && screenDrawnSinceMove && minimax == null) {
                             minimax = new Minimax(game, updateStatistics, featureBasedEvaluationMethod);
                             minimax.start();
-                            System.out.println("minimax created");
                         }
                         // done
                         if (!isHumansTurn() && minimax != null && minimax.isFinished) {
@@ -187,6 +199,24 @@ public class MainApplication extends Application {
                     sideChosen = true;
                 }
             }
+            if(suspendedByPromotion){
+                if(event.getCode() == KeyCode.Q){
+                    pendingMove.markAsPromotion(new Queen(game.whoseTurn, pendingMove.piece.x, pendingMove.piece.y, game));
+                    endSuspension();
+                }
+                else if(event.getCode() == KeyCode.R){
+                    pendingMove.markAsPromotion(new Rook(game.whoseTurn, pendingMove.piece.x, pendingMove.piece.y, game));
+                    endSuspension();
+                }
+                else if(event.getCode() == KeyCode.B){
+                    pendingMove.markAsPromotion(new Bishop(game.whoseTurn, pendingMove.piece.x, pendingMove.piece.y, game));
+                    endSuspension();
+                }
+                else if(event.getCode() == KeyCode.N){
+                    pendingMove.markAsPromotion(new Knight(game.whoseTurn, pendingMove.piece.x, pendingMove.piece.y, game));
+                    endSuspension();
+                }
+            }
             if(isInGame()){
                  if(event.getCode().isWhitespaceKey()) {
                      // stop minimax if running
@@ -219,9 +249,15 @@ public class MainApplication extends Application {
         numberOfTopLevelBranches = minimax.numberOfTopLevelBranches;
         alphaBeta = minimax.alphaBetaPruningEnabled;
         moveSorting = minimax.moveSortingEnabled;
-        runtimeInSeconds = minimax.runtimeInSeconds;
+        minimaxFilterMode = minimax.filterMode;
+        autoQueenActivated = minimax.autoQueenActivated;
+
         totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
-        positionsEvaluatedPerSecond = minimax.positionsEvaluatedPerSecond;
+
+        long runtimeInMillis = System.currentTimeMillis() - minimax.start;
+        runtimeInSeconds = runtimeInMillis / 1000.0;
+        positionsEvaluatedPerSecond = (int) (totalNumberPositionsEvaluated / runtimeInSeconds);
+
         cutoffReached = minimax.cutoffReached;
         bestValue = minimax.bestValue;
 
@@ -259,7 +295,7 @@ public class MainApplication extends Application {
     }
 
     boolean isInGame(){
-        return modeChosen && sideChosen && !game.isOver();
+        return modeChosen && sideChosen && !suspendedByPromotion && !game.isOver();
     }
 
     private void clearEntireScreen(GraphicsContext gc){
@@ -289,14 +325,14 @@ public class MainApplication extends Application {
                 for (Move move : moves) {
                     if (move.endingPosition[0] == boardX && move.endingPosition[1] == boardY) {
                         foundMoveForMousePosition = true;
-                        game.executeMove(move);
-                        game.setPossibleMoves(FilterMode.AllMoves);
-                        updatePositionToDisplay();
 
-                        screenDrawnSinceMove = false;
-
-                        isPieceSelected = false;
-                        selectedPiece = null;
+                        if(move.isPromotion()){
+                            suspendedByPromotion = true;
+                            pendingMove = move;
+                        }
+                        else {
+                            executeHumanMove(move);
+                        }
                         break;
                     }
                 }
@@ -316,6 +352,20 @@ public class MainApplication extends Application {
         }
     }
 
+    void executeHumanMove(Move move){
+        game.executeMove(move);
+        game.setPossibleMoves(FilterMode.AllMoves);
+        updatePositionToDisplay();
+
+        screenDrawnSinceMove = false;
+
+        isPieceSelected = false;
+        selectedPiece = null;
+
+        evaluationMethod.staticEvaluation(game);
+        evaluationSummary = evaluationMethod.getSummary();
+    }
+
     boolean isPerspectiveFlipped(){
         return (humanVsComputer && humanPlays == PieceColor.White) || (!humanVsComputer && humanPlays == PieceColor.Black);
     }
@@ -333,22 +383,34 @@ public class MainApplication extends Application {
                 "Turn: " + whoseTurnString,
                 "Castling white: " + whiteCastleRightString,
                 "Castling black: " + blackCastleRightString,
-                "Branching factor: " + numberOfTopLevelBranches,
+                "En passant: " + game.enPassantEnabled,
+                "",
                 "Search depth: " + searchDepth,
                 "Alpha-Beta: " + alphaBeta,
                 "Move sorting: " + moveSorting,
+                "Filter mode: " + (minimaxFilterMode == null ? "?" : minimaxFilterMode),
+                "Auto-queen: " + autoQueenActivated,
+                "",
+                "Branching factor: " + numberOfTopLevelBranches,
                 "Runtime (in sec): " + runtimeInSeconds,
                 "Positions evaluated: " + totalNumberPositionsEvaluated,
                 "Positions evaluated (per sec): " + positionsEvaluatedPerSecond,
                 "Cut-off reached: " + cutoffReached,
                 "Best value: " + bestValue,
                 "Progress: " + Math.round((minimax != null ? minimax.percentageDone : 0.0) * 100.0f) + "%",
-                "----",
+                "",
                 "[SPACE] to switch sides",
                 "[U] to undo move",
                 "[E] to start engine",
-                engineResigned ? "Engine resigned!" : ""
+                "",
+                evaluationSummary,
         };
+    }
+
+    void endSuspension(){
+        executeHumanMove(pendingMove);
+        pendingMove = null;
+        suspendedByPromotion = false;
     }
     public static void main(String[] args) {
         launch();

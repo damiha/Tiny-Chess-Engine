@@ -7,6 +7,14 @@ public class Rook extends Piece{
 
     // necessary for castling rights
     boolean onShortSide;
+    // rook cannot be used for castling
+    boolean createdThroughPromotion;
+
+    public Rook(PieceColor color, int x, int y, Game game){
+        super(color, x, y, game);
+        createdThroughPromotion = true;
+    }
+
     public Rook(PieceColor color, int x, int y, Game game, boolean onShortSide) {
         super(color, x, y, game);
         this.onShortSide = onShortSide;

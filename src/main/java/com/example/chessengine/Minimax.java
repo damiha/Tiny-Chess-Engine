@@ -40,6 +40,8 @@ public class Minimax implements Runnable{
 
     FilterMode filterMode = FilterMode.OnlyCastlingMoves;
 
+    boolean autoQueenActivated = true;
+
     public Move getEngineMove(){
 
         start = System.currentTimeMillis();
@@ -50,10 +52,6 @@ public class Minimax implements Runnable{
 
         bestValue = moveValuePair.getValue();
         bestMove = moveValuePair.getKey();
-
-        long runtimeInMillis = System.currentTimeMillis() - start;
-        runtimeInSeconds = runtimeInMillis / 1000.0;
-        positionsEvaluatedPerSecond = (int) (totalNumberPositionsEvaluated / runtimeInSeconds);
 
         updateStatistics.apply(this);
 
@@ -125,6 +123,7 @@ public class Minimax implements Runnable{
                 if(searchDepth == this.searchDepth){
                     this.percentageDone = (double) movesDone / possibleMovesInPosition.size();
                     this.bestValue = bestValueAtDepth;
+                    numberOfTopLevelBranches = possibleMovesInPosition.size();
                     updateStatistics.apply(this);
                 }
             }

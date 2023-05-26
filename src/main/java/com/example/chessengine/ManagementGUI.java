@@ -27,7 +27,9 @@ public class ManagementGUI {
         else if(!mainApplication.sideChosen){
             drawSideScreen();
         }
-
+        else if(mainApplication.suspendedByPromotion){
+            drawPromotionScreen();
+        }
         if(mainApplication.game.isOver()){
             drawGameOverScreen();
         }
@@ -67,5 +69,14 @@ public class ManagementGUI {
 
         gc.setFill(Color.BLACK);
         gc.fillText("Human vs Human - [H]\n\nHuman vs Computer - [C]\n\nLoad PGN - [L]", x, y);
+    }
+
+    // TODO: make this prettier
+    private void drawPromotionScreen(){
+        int x = windowWidth / 2 - chooseModeOffsetX;
+        int y = windowHeight / 2;
+
+        gc.setFill(Color.BLACK);
+        gc.fillText("Queen - [Q]\nRook - [R]\nBishop - [B]\nKnight - [N]", x, y);
     }
 }
