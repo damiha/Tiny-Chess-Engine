@@ -85,6 +85,8 @@ public class MainApplication extends Application {
     EvaluationMethod evaluationMethod;
     String evaluationSummary = "";
 
+    int lifeSignsObserved = 0;
+
     @Override
     public void start(Stage stage) {
 
@@ -124,7 +126,7 @@ public class MainApplication extends Application {
                 else {
                     if(humanVsComputer) {
                         if (!isHumansTurn() && screenDrawnSinceMove && minimax == null) {
-                            minimax = new Minimax(game, updateStatistics, featureBasedEvaluationMethod);
+                            minimax = new Minimax(game, updateStatistics, sendLifeSign, featureBasedEvaluationMethod);
                             minimax.start();
                         }
                         // done
@@ -304,7 +306,7 @@ public class MainApplication extends Application {
     }
 
     boolean isInGame(){
-        return modeChosen && sideChosen && !suspendedByPromotion && !game.isOver();
+        return modeChosen && sideChosen && !suspendedByPromotion && !engineResigned && !game.isOver();
     }
 
     private void clearEntireScreen(GraphicsContext gc){
@@ -379,6 +381,12 @@ public class MainApplication extends Application {
         return (humanVsComputer && humanPlays == PieceColor.White) || (!humanVsComputer && humanPlays == PieceColor.Black);
     }
 
+    Function<Void, Void> sendLifeSign = (Void) -> {
+        lifeSignsObserved += 1;
+        statisticsHaveChanged = true;
+        return null;
+    };
+
     private String[] getPanelInformation(){
 
         if(game.whiteKing == null || game.blackKing == null){
@@ -410,6 +418,7 @@ public class MainApplication extends Application {
                 "Table entries: " + tableEntries,
                 "Best value: " + bestValue,
                 "Progress: " + Math.round((minimax != null ? minimax.percentageDone : 0.0) * 100.0f) + "%",
+                minimax != null ? ("Calculating" + ".".repeat(lifeSignsObserved % 4)) : "",
                 "",
                 "[SPACE] to switch sides",
                 "[U] to undo move",

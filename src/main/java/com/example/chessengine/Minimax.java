@@ -19,10 +19,12 @@ public class Minimax implements Runnable{
     Game game;
     EvaluationMethod evaluationMethod;
     Function<Minimax, Void> updateStatistics;
+    Function<Void, Void> sendLifeSign;
     HashMap<Game, Double> transpositionTable;
-    public Minimax(Game game, Function<Minimax, Void> updateStatistics, EvaluationMethod evaluationMethod){
+    public Minimax(Game game, Function<Minimax, Void> updateStatistics, Function<Void, Void> sendLifeSign, EvaluationMethod evaluationMethod){
         this.game = game;
         this.updateStatistics = updateStatistics;
+        this.sendLifeSign = sendLifeSign;
         this.evaluationMethod = evaluationMethod;
         this.transpositionTable = new HashMap<>();
     }
@@ -42,7 +44,7 @@ public class Minimax implements Runnable{
 
     FilterMode filterMode = FilterMode.AllMoves;
     boolean autoQueenActivated = true;
-    boolean transpositionTablesEnabled = true;
+    boolean transpositionTablesEnabled = false;
 
     int tableEntries = 0;
     int cacheHits = 0;
@@ -67,6 +69,7 @@ public class Minimax implements Runnable{
         if(bestMove == null){
             System.out.println("Engine resigns!");
         }
+
         return bestMove;
     }
 
@@ -141,7 +144,7 @@ public class Minimax implements Runnable{
                     updateStatistics.apply(this);
                 }
                 else if(totalNumberPositionsEvaluated % lifeSignEvery == 0){
-                    System.out.println("Calculating...");
+                    sendLifeSign.apply(null);
                 }
             }
 
@@ -166,14 +169,6 @@ public class Minimax implements Runnable{
     // sort in place
     public void sortMoves(List<Move> moves){
         moves.sort((m1, m2) -> {
-            // king moves first, can't hurt, they are few and they speed up the bottle necks (when the enemy checks)
-            /*
-            int kingComparison = Integer.compare((m1.piece instanceof King ? -1 : 1), (m2.piece instanceof King ? -1 : 1));
-            if(kingComparison != 0)
-                return kingComparison;
-
-            */
-            // no kings
             int captureComparison = Integer.compare((m1.isCapture() ? -1 : 1), (m2.isCapture() ? -1 : 1));
             if(captureComparison != 0){
                 return captureComparison;
@@ -188,10 +183,33 @@ public class Minimax implements Runnable{
                 return Double.compare(m1ValueDifference, m2ValueDifference);
             }
             // both are non-captures
-            else{
-                return Integer.compare((m1.isPromotion() ? -1 : 1), (m2.isPromotion() ? -1 : 1));
+            int promotionComparison = Integer.compare((m1.isPromotion() ? -1 : 1), (m2.isPromotion() ? -1 : 1));
+            if(promotionComparison != 0){
+                return promotionComparison;
             }
+            // non-capture, non promotion
+            // investigate most mobile pieces first (minus for descending sort)
+            return Integer.compare(-getMobilityScore(m1.piece), -getMobilityScore(m2.piece));
         });
+    }
+
+    private int getMobilityScore(Piece piece){
+        if(piece instanceof Queen){
+            return 5;
+        }
+        else if(piece instanceof Rook){
+            return 4;
+        }
+        else if(piece instanceof Bishop){
+            return 3;
+        }
+        else if(piece instanceof Knight){
+            return 2;
+        }
+        else if(piece instanceof King){
+            return 1;
+        }
+        return 0;
     }
 
     @Override

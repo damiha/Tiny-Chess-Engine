@@ -306,8 +306,13 @@ public class Game {
         if(filterMode == FilterMode.Nothing) {
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 8; x++) {
-                    if (position[y][x] != null && position[y][x].color == whoseTurn) {
-                        possibleMovesInCurrentPosition.addAll(position[y][x].getPossibleMoves());
+                    Piece piece = position[y][x];
+                    if (piece != null && piece.color == whoseTurn) {
+
+                        List<Move> possiblePieceMoves = piece.getPossibleMoves();
+                        piece.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
+
+                        possibleMovesInCurrentPosition.addAll(possiblePieceMoves);
                     }
                 }
             }
@@ -328,16 +333,21 @@ public class Game {
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 8; x++) {
                     if (position[y][x] != null && position[y][x].color == whoseTurn) {
+
                         Piece pieceToBeMoved = position[y][x];
+                        List<Move> possiblePieceMoves = pieceToBeMoved.getPossibleMoves();
 
                         boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !defenders.contains(pieceToBeMoved));
 
                         if(checkNotNecessary){
-                            possibleMovesInCurrentPosition.addAll(pieceToBeMoved.getPossibleMoves());
+
+                            pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
+                            possibleMovesInCurrentPosition.addAll(possiblePieceMoves);
                         }
                         else {
-
-                            for (Move candidateMove : pieceToBeMoved.getPossibleMoves()) {
+                            // reset and increment for every legal move
+                            pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
+                            for (Move candidateMove : possiblePieceMoves) {
 
                                 // can't castle out of check, through check, immediately discard those
                                 if (candidateMove.isCastle()) {
@@ -352,6 +362,7 @@ public class Game {
                                 executeMove(candidateMove);
                                 if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
                                     possibleMovesInCurrentPosition.add(candidateMove);
+                                    pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
                                 }
                                 undoLastMove();
                             }
@@ -435,13 +446,14 @@ public class Game {
         return false;
     }
 
+    // you cannot have a defender that blocks a knight move
     Set<Piece> getDefenders(PieceColor color, int x, int y){
 
         Set<Piece> defenders = new HashSet<>();
         // check all diagonals
         List<BiFunction<int[], Integer, int[]>> locationGenerators = List.of(
                 getULDiagonal, getURDiagonal, getLLDiagonal,
-                getLRDiagonal, getLeft, getRight, getUp, getDown, getKnightMoves);
+                getLRDiagonal, getLeft, getRight, getUp, getDown);
 
         for(BiFunction<int[], Integer, int[]> getLocation : locationGenerators){
             Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
@@ -488,7 +500,8 @@ public class Game {
     };
 
     public Piece getFirstPieceOnPath(int x, int y, BiFunction<int[], Integer, int[]> getLocation){
-        for(int i = 1;;i++){
+        // no path on a chess board is longer than 8 squares
+        for(int i = 1;i < 8;i++){
             int[] location = getLocation.apply(new int[]{x, y}, i);
 
             if(!insideBoard(location)){
@@ -499,6 +512,7 @@ public class Game {
                 return pieceAtLocation;
             }
         }
+        return null;
     }
     ArrayList<Move> getDeepCopyOfMoves(){
         ArrayList<Move> deepCopyOfMoves = new ArrayList<>();

@@ -5,31 +5,49 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
     // TODO: later make possible to load in from file for PSO optimization
 
     // hyperparameters
-    double valueInnerCenter = 0.5;
-    double valueOuterCenter = 0.25;
-    double valuePastPawn = 1.0;
+    double valueInnerCenter = 0.25;
+    double valueOuterCenter = 0.125;
+
+    // discourage king, queen and rook to go to the (outer center) when endgame hasn't been reached
+    double dangerValueInCenter = -0.25;
+
+    double valuePastPawnDistanceFromStart = 0.5;
     double valueHavingCastled = 2.0;
     double valueSingleCastleRight = 0.5;
 
     // the more pieces come off the board, the bigger the difference gets
     double valueDifferenceSlope = 1.0 / 16.0;
 
+    // encourages mobility
+    double valuePerAdditionalPossibleMove = 0.01;
+
     // telemetry
     int numberOfWhitePiecesInInnerCenter, numberOfWhitePiecesInOuterCenter;
+    int numberOfWhiteMajorPiecesInCenter, numberOfBlackMajorPiecesInCenter;
     int numberOfBlackPiecesInInnerCenter, numberOfBlackPiecesInOuterCenter;
     int numberOfWhitePastPawns, numberOfBlackPastPawns;
+    int numberOfPossibleMovesWhite, numberOfPossibleMovesBlack;
+    double whitePastPawnsValue, blackPastPawnsValue;
 
     // for exponential value difference
     int piecesOnBoard;
     boolean whiteKingSideSafe, whiteQueenSideSafe;
     boolean blackKingSideSafe, blackQueenSideSafe;
+    boolean positionalPlay = true;
+    boolean mobilityPlay = true;
+    boolean isEndgame = false;
 
+    // TODO: add a heuristic for the endgame
     void resetStats(){
         piecesOnBoard = 0;
         numberOfWhitePiecesInInnerCenter =  numberOfWhitePiecesInOuterCenter = numberOfWhitePastPawns = 0;
         numberOfBlackPiecesInInnerCenter =  numberOfBlackPiecesInOuterCenter = numberOfBlackPastPawns = 0;
+        numberOfWhiteMajorPiecesInCenter = numberOfBlackMajorPiecesInCenter = 0;
         whiteKingSideSafe = whiteQueenSideSafe = true;
         blackKingSideSafe = blackQueenSideSafe = true;
+        numberOfPossibleMovesWhite = numberOfPossibleMovesBlack = 0;
+        whitePastPawnsValue = blackPastPawnsValue = 0;
+        isEndgame = false;
     }
     public double staticEvaluation(Game game){
 
@@ -46,16 +64,17 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         }
         else{
             updateKingSafety(game);
-            boolean positionalPlay = true;
             double castleRightEvaluation = getCastleRightValue(game.whiteKing) - getCastleRightValue(game.blackKing);
             double kingSafetyEvaluation = getKingSafetyValue(game.whiteKing) - getKingSafetyValue(game.blackKing);
             int piecesOffBoard = 32 - piecesOnBoard;
-            return getPieceCount(game, positionalPlay) * getValueDifferenceFactor(piecesOffBoard)
+            return getPieceCount(game) * getValueDifferenceFactor(piecesOffBoard)
+                    + (numberOfPossibleMovesWhite - numberOfPossibleMovesBlack) * valuePerAdditionalPossibleMove
                     + (numberOfWhitePiecesInInnerCenter - numberOfBlackPiecesInInnerCenter) * valueInnerCenter
                     + (numberOfWhitePiecesInOuterCenter - numberOfWhitePiecesInInnerCenter) * valueOuterCenter
-                    + (numberOfWhitePastPawns - numberOfBlackPastPawns) * valuePastPawn
-                    + castleRightEvaluation
-                    + kingSafetyEvaluation;
+                    + (whitePastPawnsValue - blackPastPawnsValue)
+                    + (!isEndgame ? (numberOfWhiteMajorPiecesInCenter - numberOfBlackMajorPiecesInCenter) * dangerValueInCenter : 0)
+                    + (!isEndgame ? castleRightEvaluation : 0)
+                    + (!isEndgame ? kingSafetyEvaluation : 0);
         }
     }
 
@@ -113,8 +132,10 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         if(piece instanceof Pawn && isPastPawn(game, piece, x, y)){
             if(piece.color == PieceColor.White){
                 numberOfWhitePastPawns += 1;
+                whitePastPawnsValue += valuePastPawnDistanceFromStart * Math.abs(y - 6);
             }else{
                 numberOfBlackPastPawns += 1;
+                blackPastPawnsValue += valuePastPawnDistanceFromStart * Math.abs(y - 1);
             }
         }
         // minor pieces in the center get extra points
@@ -137,6 +158,14 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
                 }
             }
         }
+        // they get discouraged (don't play Scandinavian Defense all the time)
+        else if ((x >= 2 && x <= 5) && (y >= 2 && y <= 5)) {
+            if (piece.color == PieceColor.White) {
+                numberOfWhiteMajorPiecesInCenter += 1;
+            } else {
+                numberOfBlackMajorPiecesInCenter += 1;
+            }
+        }
     }
 
     boolean isPawnOrMinorPiece(Piece piece){
@@ -150,13 +179,17 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
             if(rankChecked < 0 || rankChecked > 7){
                 return true;
             }
-            // pawns left or right?
+            // pawns left or right or in front?
             Piece pieceToLeft = game.getPieceAt(new int[]{x - 1, rankChecked});
             if(pieceToLeft instanceof Pawn && pieceToLeft.color == piece.color.getOppositeColor()){
                 return false;
             }
             Piece pieceToRight = game.getPieceAt(new int[]{x + 1, rankChecked});
             if(pieceToRight instanceof Pawn && pieceToRight.color == piece.color.getOppositeColor()){
+                return false;
+            }
+            Piece pieceInFront = game.getPieceAt(new int[]{x, rankChecked});
+            if(pieceInFront instanceof Pawn && pieceInFront.color == piece.color.getOppositeColor()){
                 return false;
             }
         }
@@ -185,36 +218,55 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         }
     }
 
-    double getPieceCount(Game game, boolean positionalPlay){
+    double getPieceCount(Game game){
         double count = 0;
+        int queensOnBoard = 0;
+
         for(int y = 0; y < 8; y++){
             for(int x = 0; x < 8; x++){
-                if(game.position[y][x] != null){
+                Piece piece = game.position[y][x];
+                if(piece != null){
 
                     piecesOnBoard += 1;
+                    queensOnBoard += (piece instanceof Queen ? 1 : 0);
 
-                    if(game.position[y][x].color == PieceColor.White){
-                        count += getPieceValue(game.position[y][x]);
+                    if(piece.color == PieceColor.White){
+                        count += getPieceValue(piece);
                     }
                     else{
-                        count -= getPieceValue(game.position[y][x]);
+                        count -= getPieceValue(piece);
                     }
                     if(positionalPlay) {
-                        updatePositionalValue(game, game.position[y][x], x, y);
+                        updatePositionalValue(game, piece, x, y);
+                    }
+                    if(mobilityPlay){
+                        if(piece.color == PieceColor.White){
+                            numberOfPossibleMovesWhite += piece.getRecentNumberOfPossibleMoves();
+                        }
+                        else{
+                            numberOfPossibleMovesBlack += piece.getRecentNumberOfPossibleMoves();
+                        }
                     }
                 }
             }
         }
+
+        isEndgame = (queensOnBoard == 0);
+
         return count;
     }
     @Override
     public String getSummary(){
-        return String.format("Pieces in inner center: %d (w), %d (b)\n", numberOfWhitePiecesInInnerCenter, numberOfBlackPiecesInInnerCenter) +
-                String.format("Pieces in outer center: %d (w), %d (b)\n", numberOfWhitePiecesInOuterCenter, numberOfBlackPiecesInOuterCenter) +
+        return  String.format("Minor pieces/pawns inner center: %d (w), %d (b)\n", numberOfWhitePiecesInInnerCenter, numberOfBlackPiecesInInnerCenter) +
+                String.format("Minor pieces/pawns outer center: %d (w), %d (b)\n", numberOfWhitePiecesInOuterCenter, numberOfBlackPiecesInOuterCenter) +
+                String.format("Major pieces outer center: %d (w), %d (b)\n", numberOfWhiteMajorPiecesInCenter, numberOfBlackMajorPiecesInCenter) +
                 String.format("Past pawns: %d (w), %d (b)\n", numberOfWhitePastPawns, numberOfBlackPastPawns) +
+                String.format("Past pawns values: %.3f (w), %.3f (b)\n", whitePastPawnsValue, blackPastPawnsValue) +
                 String.format("King side safe: %b (w), %b (b)\n", whiteKingSideSafe, blackKingSideSafe) +
                 String.format("Queen side safe: %b (w), %b (b)\n", whiteQueenSideSafe, blackQueenSideSafe) +
                 String.format("Pieces taken: %d\n", 32 - piecesOnBoard) +
-                String.format("Value difference factor: %.3f\n", getValueDifferenceFactor(32 - piecesOnBoard));
+                String.format("Value difference factor: %.3f\n", getValueDifferenceFactor(32 - piecesOnBoard)) +
+                String.format("Possible moves: %d (w), %d (b)\n", numberOfPossibleMovesWhite, numberOfPossibleMovesBlack) +
+                String.format("Endgame: %b\n", isEndgame);
     }
 }

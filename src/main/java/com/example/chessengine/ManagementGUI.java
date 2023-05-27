@@ -30,7 +30,7 @@ public class ManagementGUI {
         else if(mainApplication.suspendedByPromotion){
             drawPromotionScreen();
         }
-        if(mainApplication.game.isOver()){
+        if(mainApplication.game.isOver() || mainApplication.engineResigned){
             drawGameOverScreen();
         }
     }

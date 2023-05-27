@@ -9,16 +9,29 @@ public abstract class Piece {
     int[] position;
     int x, y;
 
+    int recentNumberOfPossibleMoves;
+
     public Piece(PieceColor color, int x, int y, Game game){
         this.color = color;
         this.game = game;
         position = new int[]{x, y};
         this.x = x;
         this.y = y;
+        recentNumberOfPossibleMoves = 0;
     }
     // copy constructor
     // find yourself on the board
     public abstract List<Move> getPossibleMoves();
+
+    public void setRecentNumberOfPossibleMoves(int n){
+        recentNumberOfPossibleMoves = n;
+    }
+    public int getRecentNumberOfPossibleMoves(){
+        return recentNumberOfPossibleMoves;
+    }
+    public void incrementRecentNumberOfPossibleMoves(){
+        recentNumberOfPossibleMoves += 1;
+    }
     @Override
     public abstract String toString();
 
