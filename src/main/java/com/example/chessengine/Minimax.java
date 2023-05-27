@@ -216,6 +216,7 @@ public class Minimax implements Runnable{
             // new moves are set in next call
             ChessLine potentialLine = quiescenceSearch(game, !isMaximizingPlayer, alpha, beta, depth - 1);
             potentialLine.addMove(captureMove);
+            // added comment
 
             if((isMaximizingPlayer && potentialLine.getEvaluation() > bestValue) ||
                     (!isMaximizingPlayer && potentialLine.getEvaluation() < bestValue)){
