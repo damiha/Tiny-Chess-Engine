@@ -71,6 +71,12 @@ public class MainApplication extends Application {
 
     boolean autoQueenActivated;
 
+    boolean transpositionTablesEnabled;
+
+    int cacheHits;
+
+    int tableEntries;
+
     // when human promotes, we have to ask to which piece?
     boolean suspendedByPromotion = false;
     Move pendingMove = null;
@@ -251,6 +257,9 @@ public class MainApplication extends Application {
         moveSorting = minimax.moveSortingEnabled;
         minimaxFilterMode = minimax.filterMode;
         autoQueenActivated = minimax.autoQueenActivated;
+        transpositionTablesEnabled = minimax.transpositionTablesEnabled;
+        cacheHits = minimax.cacheHits;
+        tableEntries = minimax.tableEntries;
 
         totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
 
@@ -388,6 +397,7 @@ public class MainApplication extends Application {
                 "Search depth: " + searchDepth,
                 "Alpha-Beta: " + alphaBeta,
                 "Move sorting: " + moveSorting,
+                "Transposition tables: " + transpositionTablesEnabled,
                 "Filter mode: " + (minimaxFilterMode == null ? "?" : minimaxFilterMode),
                 "Auto-queen: " + autoQueenActivated,
                 "",
@@ -396,6 +406,8 @@ public class MainApplication extends Application {
                 "Positions evaluated: " + totalNumberPositionsEvaluated,
                 "Positions evaluated (per sec): " + positionsEvaluatedPerSecond,
                 "Cut-off reached: " + cutoffReached,
+                "Cache hits: " + cacheHits,
+                "Table entries: " + tableEntries,
                 "Best value: " + bestValue,
                 "Progress: " + Math.round((minimax != null ? minimax.percentageDone : 0.0) * 100.0f) + "%",
                 "",

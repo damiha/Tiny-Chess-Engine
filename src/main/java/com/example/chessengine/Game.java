@@ -2,14 +2,9 @@ package com.example.chessengine;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Stack;
+import java.util.*;
 import java.util.function.BiFunction;
-import java.util.stream.Stream;
 
 public class Game {
 
@@ -318,37 +313,47 @@ public class Game {
             }
         }
         // filter out illegal moves
-        if(filterMode != FilterMode.Nothing){
+        else if(filterMode == FilterMode.AllMoves){
 
             King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
+
+            Set<Piece> defenders = getDefenders(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
+
+            PieceColor oppositeColor = whoseTurn.getOppositeColor();
+            boolean kingInCheck = isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y);
+
+            // if king is not in check, we can only walk into check or move a pinned piece
+            // if king is in check, we either walk away from it or capture or block (that's too complicated, check everything there)
 
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 8; x++) {
                     if (position[y][x] != null && position[y][x].color == whoseTurn) {
-                        for(Move candidateMove : position[y][x].getPossibleMoves()){
+                        Piece pieceToBeMoved = position[y][x];
 
-                            if(filterMode == FilterMode.AllMoves || (filterMode == FilterMode.OnlyCastlingMoves && candidateMove.isCastle())) {
+                        boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !defenders.contains(pieceToBeMoved));
 
-                                PieceColor oppositeColor = whoseTurn.getOppositeColor();
+                        if(checkNotNecessary){
+                            possibleMovesInCurrentPosition.addAll(pieceToBeMoved.getPossibleMoves());
+                        }
+                        else {
+
+                            for (Move candidateMove : pieceToBeMoved.getPossibleMoves()) {
 
                                 // can't castle out of check, through check, immediately discard those
-                                if(candidateMove.isCastle()){
-                                    if(isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y) ||
+                                if (candidateMove.isCastle()) {
+                                    if (kingInCheck ||
                                             (candidateMove.isShortCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x + 1, kingToBeProtected.y))
-                                        || (candidateMove.isLongCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x - 1, kingToBeProtected.y))){
+                                            || (candidateMove.isLongCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x - 1, kingToBeProtected.y))) {
                                         continue;
                                     }
                                 }
-                                // getOppositeColor() has to be called before executeMove() since sides switch
+                                // we can only run into checkmate if a defender that's pinned moves or king moves
+                                // we only generate moves for one side
                                 executeMove(candidateMove);
                                 if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
                                     possibleMovesInCurrentPosition.add(candidateMove);
                                 }
                                 undoLastMove();
-                            }
-                            // no filtering required
-                            else{
-                                possibleMovesInCurrentPosition.add(candidateMove);
                             }
                         }
                     }
@@ -357,13 +362,16 @@ public class Game {
             // either checkmate or stalemate
             if(possibleMovesInCurrentPosition.isEmpty()){
                 // checkmate
-                if(isSquareAttackedBy(whoseTurn.getOppositeColor(), kingToBeProtected.x, kingToBeProtected.y)){
+                if(kingInCheck){
                     outcome = (whoseTurn.getOppositeColor() == PieceColor.Black ? Outcome.BlackWon : Outcome.WhiteWon);
                 }
                 else{
                     outcome = Outcome.Stalemate;
                 }
             }
+        }
+        else{
+            throw new RuntimeException("only checking castling moves is not allowed anymore");
         }
     }
 
@@ -385,6 +393,7 @@ public class Game {
             }
             res += "\n";
         }
+        res += whoseTurn.name();
         return res;
     }
 
@@ -424,6 +433,23 @@ public class Game {
             }
         }
         return false;
+    }
+
+    Set<Piece> getDefenders(PieceColor color, int x, int y){
+
+        Set<Piece> defenders = new HashSet<>();
+        // check all diagonals
+        List<BiFunction<int[], Integer, int[]>> locationGenerators = List.of(
+                getULDiagonal, getURDiagonal, getLLDiagonal,
+                getLRDiagonal, getLeft, getRight, getUp, getDown, getKnightMoves);
+
+        for(BiFunction<int[], Integer, int[]> getLocation : locationGenerators){
+            Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
+            if(firstPieceOnPath != null && firstPieceOnPath.color == color){
+                defenders.add(firstPieceOnPath);
+            }
+        }
+        return defenders;
     }
 
     boolean canDiagonallyCapture(Piece piece, int x, int y){
@@ -607,5 +633,18 @@ public class Game {
             }
         }
         return rank;
+    }
+
+    // for transposition tables
+    public int hashCode(){
+        return toString().hashCode();
+    }
+
+    // TODO: extend this
+    @Override
+    public boolean equals(Object other){
+        return other instanceof Game
+                && hashCode() == other.hashCode()
+                && whoseTurn == ((Game) other).whoseTurn;
     }
 }

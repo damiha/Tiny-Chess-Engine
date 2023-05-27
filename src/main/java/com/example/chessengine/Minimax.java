@@ -2,6 +2,7 @@ package com.example.chessengine;
 
 import javafx.util.Pair;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
 
@@ -17,12 +18,13 @@ public class Minimax implements Runnable{
     int searchDepth = 6;
     Game game;
     EvaluationMethod evaluationMethod;
-
     Function<Minimax, Void> updateStatistics;
+    HashMap<Game, Double> transpositionTable;
     public Minimax(Game game, Function<Minimax, Void> updateStatistics, EvaluationMethod evaluationMethod){
         this.game = game;
         this.updateStatistics = updateStatistics;
         this.evaluationMethod = evaluationMethod;
+        this.transpositionTable = new HashMap<>();
     }
 
     int totalNumberPositionsEvaluated = 0;
@@ -39,8 +41,14 @@ public class Minimax implements Runnable{
     boolean isFinished;
 
     FilterMode filterMode = FilterMode.AllMoves;
-
     boolean autoQueenActivated = true;
+    boolean transpositionTablesEnabled = true;
+
+    int tableEntries = 0;
+    int cacheHits = 0;
+
+    // then, it's invoking the update function
+    int lifeSignEvery = 100000;
 
     public Move getEngineMove(){
 
@@ -69,6 +77,12 @@ public class Minimax implements Runnable{
             return new Pair<>(null, evaluationMethod.staticEvaluation(game));
         }
         else{
+            // table hit can never happen on toplevel so its fine to not return a move
+            if(transpositionTablesEnabled && transpositionTable.containsKey(game)){
+                cacheHits += 1;
+                return new Pair<>(null, transpositionTable.get(game));
+            }
+
             // have to be copied since recursive calls change move list
             List<Move> possibleMovesInPosition = game.getDeepCopyOfMoves();
 
@@ -126,6 +140,14 @@ public class Minimax implements Runnable{
                     numberOfTopLevelBranches = possibleMovesInPosition.size();
                     updateStatistics.apply(this);
                 }
+                else if(totalNumberPositionsEvaluated % lifeSignEvery == 0){
+                    System.out.println("Calculating...");
+                }
+            }
+
+            if(transpositionTablesEnabled){
+                transpositionTable.put(game,  bestValueAtDepth);
+                tableEntries += 1;
             }
             return new Pair<>(bestMove, bestValueAtDepth);
         }
