@@ -73,6 +73,10 @@ public class MainApplication extends Application {
 
     boolean transpositionTablesEnabled;
 
+    boolean quiescenceSearchEnabled;
+
+    int quiescenceDepth;
+
     int cacheHits;
 
     int tableEntries;
@@ -86,6 +90,8 @@ public class MainApplication extends Application {
     String evaluationSummary = "";
 
     int lifeSignsObserved = 0;
+
+    Outcome outcome = Outcome.Open;
 
     @Override
     public void start(Stage stage) {
@@ -260,6 +266,9 @@ public class MainApplication extends Application {
         minimaxFilterMode = minimax.filterMode;
         autoQueenActivated = minimax.autoQueenActivated;
         transpositionTablesEnabled = minimax.transpositionTablesEnabled;
+        quiescenceSearchEnabled = minimax.quiescenceSearchEnabled;
+        quiescenceDepth = minimax.quiescenceDepth;
+
         cacheHits = minimax.cacheHits;
         tableEntries = minimax.tableEntries;
 
@@ -296,6 +305,7 @@ public class MainApplication extends Application {
         for(int y = 0; y < 8; y++){
             System.arraycopy(game.position[y], 0, positionToDisplay[y], 0, 8);
         }
+        outcome = game.getOutcome();
         turnToDisplay = game.whoseTurn;
         whiteCastleRightString =
                 (game.whiteKing.canShortCastle ? "short" : "") + ", " +
@@ -306,7 +316,7 @@ public class MainApplication extends Application {
     }
 
     boolean isInGame(){
-        return modeChosen && sideChosen && !suspendedByPromotion && !engineResigned && !game.isOver();
+        return modeChosen && sideChosen && !suspendedByPromotion && !engineResigned && outcome == Outcome.Open;
     }
 
     private void clearEntireScreen(GraphicsContext gc){
@@ -403,9 +413,11 @@ public class MainApplication extends Application {
                 "En passant: " + game.enPassantEnabled,
                 "",
                 "Search depth: " + searchDepth,
+                "Quiescence depth: " + quiescenceDepth,
                 "Alpha-Beta: " + alphaBeta,
                 "Move sorting: " + moveSorting,
                 "Transposition tables: " + transpositionTablesEnabled,
+                "Quiescence search: " + quiescenceSearchEnabled,
                 "Filter mode: " + (minimaxFilterMode == null ? "?" : minimaxFilterMode),
                 "Auto-queen: " + autoQueenActivated,
                 "",

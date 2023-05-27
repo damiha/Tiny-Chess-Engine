@@ -20,9 +20,12 @@ public class Game {
     Stack<String> history;
     Stack<String> boardHistory;
 
-    boolean debugOn = false;
+    boolean debugOn = true;
     boolean enPassantEnabled = true;
     ArrayList<Move> possibleMovesInCurrentPosition;
+
+    // for quiescence search
+    ArrayList<Move> possibleCapturesInCurrentPosition;
 
     Outcome outcome;
 
@@ -39,6 +42,8 @@ public class Game {
         storedCastleRights = new Stack<>();
 
         possibleMovesInCurrentPosition = new ArrayList<>();
+        possibleCapturesInCurrentPosition = new ArrayList<>();
+
         setPossibleMoves(FilterMode.AllMoves);
 
         outcome = Outcome.Open;
@@ -218,6 +223,7 @@ public class Game {
 
         assert insideBoard(move.endingPosition) : "ERROR: illegal move!";
         assert !isOver() : "ERROR: game is over!";
+        assert !(move.getCapturedPiece() instanceof King) : "ERROR: illegal king capture!";
 
         storedCastleRights.push(new CastleRights(whiteKing, blackKing));
 
@@ -289,6 +295,9 @@ public class Game {
         return possibleMovesInCurrentPosition;
     }
 
+    // for quiescence search
+    List<Move> getPossibleCaptures(){return possibleCapturesInCurrentPosition; }
+
     public List<Move> getMovesOfSelectedPiece(Piece selectedPiece){
         ArrayList<Move> movesOfSelectedPiece = new ArrayList<>();
         for(Move move : getPossibleMoves()){
@@ -300,25 +309,16 @@ public class Game {
     }
     // get all moves the current player (whose turn) can currently make
     void setPossibleMoves(FilterMode filterMode){
+        setPossibleMoves(filterMode, false);
+    }
+    void setPossibleMoves(FilterMode filterMode, boolean onlyCaptures){
 
-        possibleMovesInCurrentPosition.clear();
+        List<Move> movesToUpdate = onlyCaptures ? possibleCapturesInCurrentPosition : possibleMovesInCurrentPosition;
 
-        if(filterMode == FilterMode.Nothing) {
-            for (int y = 0; y < 8; y++) {
-                for (int x = 0; x < 8; x++) {
-                    Piece piece = position[y][x];
-                    if (piece != null && piece.color == whoseTurn) {
+        movesToUpdate.clear();
 
-                        List<Move> possiblePieceMoves = piece.getPossibleMoves();
-                        piece.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
-
-                        possibleMovesInCurrentPosition.addAll(possiblePieceMoves);
-                    }
-                }
-            }
-        }
         // filter out illegal moves
-        else if(filterMode == FilterMode.AllMoves){
+        if(filterMode == FilterMode.AllMoves){
 
             King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
 
@@ -337,12 +337,17 @@ public class Game {
                         Piece pieceToBeMoved = position[y][x];
                         List<Move> possiblePieceMoves = pieceToBeMoved.getPossibleMoves();
 
+                        if(onlyCaptures){
+                            possiblePieceMoves = possiblePieceMoves.stream().filter(Move::isCapture).toList();
+                        }
+
                         boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !defenders.contains(pieceToBeMoved));
 
                         if(checkNotNecessary){
-
-                            pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
-                            possibleMovesInCurrentPosition.addAll(possiblePieceMoves);
+                            if(!onlyCaptures) {
+                                pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
+                            }
+                            movesToUpdate.addAll(possiblePieceMoves);
                         }
                         else {
                             // reset and increment for every legal move
@@ -361,8 +366,10 @@ public class Game {
                                 // we only generate moves for one side
                                 executeMove(candidateMove);
                                 if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
-                                    possibleMovesInCurrentPosition.add(candidateMove);
-                                    pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
+                                    movesToUpdate.add(candidateMove);
+                                    if(!onlyCaptures) {
+                                        pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
+                                    }
                                 }
                                 undoLastMove();
                             }
@@ -520,6 +527,13 @@ public class Game {
             deepCopyOfMoves.add(move.getDeepCopy());
         }
         return deepCopyOfMoves;
+    }
+    ArrayList<Move> getDeepCopyOfCaptures(){
+        ArrayList<Move> deepCopyOfCaptures = new ArrayList<>();
+        for(Move move : getPossibleCaptures()){
+            deepCopyOfCaptures.add(move.getDeepCopy());
+        }
+        return deepCopyOfCaptures;
     }
     // TODO: extend this
     public void loadFromPGN(File file){

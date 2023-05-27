@@ -1,5 +1,7 @@
 package com.example.chessengine;
 
+import java.util.List;
+
 public class FeatureBasedEvaluationMethod extends EvaluationMethod {
 
     // TODO: later make possible to load in from file for PSO optimization
@@ -255,6 +257,76 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
 
         return count;
     }
+
+    static double getRawPieceCount(Game game){
+        double count = 0;
+
+        for(int y = 0; y < 8; y++){
+            for(int x = 0; x < 8; x++){
+                Piece piece = game.position[y][x];
+                if(piece != null){
+
+                    if(piece.color == PieceColor.White){
+                        count += getPieceValue(piece);
+                    }
+                    else{
+                        count -= getPieceValue(piece);
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    public static double getCaptureValueDifference(Move move){
+        assert move.isCapture();
+        return getPieceValue(move.getCapturedPiece()) - getPieceValue(move.piece);
+    }
+
+    // sort in place
+    public static void sortMoves(List<Move> moves){
+        moves.sort((m1, m2) -> {
+            int captureComparison = Integer.compare((m1.isCapture() ? -1 : 1), (m2.isCapture() ? -1 : 1));
+            if(captureComparison != 0){
+                return captureComparison;
+            }
+            // both are captures or non-captures
+            if(m1.isCapture()){
+                // sort by value difference descending (highest one first)
+                double m1ValueDifference = getCaptureValueDifference(m1);
+                double m2ValueDifference = getCaptureValueDifference(m2);
+                return Double.compare(-m1ValueDifference, -m2ValueDifference);
+            }
+            // both are non-captures
+            int promotionComparison = Integer.compare((m1.isPromotion() ? -1 : 1), (m2.isPromotion() ? -1 : 1));
+            if(promotionComparison != 0){
+                return promotionComparison;
+            }
+            // non-capture, non promotion
+            // investigate most mobile pieces first (minus for descending sort)
+            return Integer.compare(-getMobilityScore(m1.piece), -getMobilityScore(m2.piece));
+        });
+    }
+
+    private static int getMobilityScore(Piece piece){
+        if(piece instanceof Queen){
+            return 5;
+        }
+        else if(piece instanceof Rook){
+            return 4;
+        }
+        else if(piece instanceof Bishop){
+            return 3;
+        }
+        else if(piece instanceof Knight){
+            return 2;
+        }
+        else if(piece instanceof King){
+            return 1;
+        }
+        return 0;
+    }
+
     @Override
     public String getSummary(){
         return  String.format("Minor pieces/pawns inner center: %d (w), %d (b)\n", numberOfWhitePiecesInInnerCenter, numberOfBlackPiecesInInnerCenter) +

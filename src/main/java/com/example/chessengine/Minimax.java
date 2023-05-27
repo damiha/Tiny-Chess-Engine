@@ -1,7 +1,5 @@
 package com.example.chessengine;
 
-import javafx.util.Pair;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
@@ -15,7 +13,9 @@ public class Minimax implements Runnable{
 
     // in half moves (always uneven so enemy has the advantage)
     // base search depth
-    int searchDepth = 6;
+    int searchDepth = 4;
+
+    int quiescenceDepth = 10;
     Game game;
     EvaluationMethod evaluationMethod;
     Function<Minimax, Void> updateStatistics;
@@ -44,7 +44,9 @@ public class Minimax implements Runnable{
 
     FilterMode filterMode = FilterMode.AllMoves;
     boolean autoQueenActivated = true;
-    boolean transpositionTablesEnabled = false;
+    boolean transpositionTablesEnabled = true;
+
+    boolean quiescenceSearchEnabled = true;
 
     int tableEntries = 0;
     int cacheHits = 0;
@@ -58,10 +60,12 @@ public class Minimax implements Runnable{
 
         double alpha = Integer.MIN_VALUE;
         double beta = Integer.MAX_VALUE;
-        Pair<Move, Double> moveValuePair = minimax(game, game.whoseTurn == PieceColor.White, searchDepth, alpha, beta);
+        ChessLine bestLine = minimax(game, game.whoseTurn == PieceColor.White, searchDepth, alpha, beta);
 
-        bestValue = moveValuePair.getValue();
-        bestMove = moveValuePair.getKey();
+        System.out.println(bestLine);
+
+        bestValue = bestLine.getEvaluation();
+        bestMove = bestLine.getMove();
 
         updateStatistics.apply(this);
 
@@ -73,48 +77,62 @@ public class Minimax implements Runnable{
         return bestMove;
     }
 
-    public Pair<Move, Double> minimax(Game game, boolean isMaximizingPlayer, int searchDepth, double alpha, double beta){
+    public ChessLine minimax(Game game, boolean isMaximizingPlayer, int searchDepth, double alpha, double beta){
 
-        if(searchDepth == 0 || game.isOver()){
+        if(game.isOver()){
             totalNumberPositionsEvaluated++;
-            return new Pair<>(null, evaluationMethod.staticEvaluation(game));
+            return new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
+        }
+        else if(searchDepth == 0){
+            if(quiescenceSearchEnabled) {
+                ChessLine quiescenceLine = quiescenceSearch(game, isMaximizingPlayer, alpha, beta, quiescenceDepth);
+                String boardBeforeQuiescence = game.toString();
+                ChessLine mainLine = new ChessLine(game.toString(), quiescenceLine.getEvaluation());
+
+                mainLine.quiescenceLine = quiescenceLine;
+                mainLine.boardBeforeQuiescence = boardBeforeQuiescence;
+
+                return mainLine;
+            }
+            else{
+                totalNumberPositionsEvaluated++;
+                return new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
+            }
         }
         else{
             // table hit can never happen on toplevel so its fine to not return a move
             if(transpositionTablesEnabled && transpositionTable.containsKey(game)){
                 cacheHits += 1;
-                return new Pair<>(null, transpositionTable.get(game));
+                return new ChessLine(game.toString(), transpositionTable.get(game));
             }
 
             // have to be copied since recursive calls change move list
             List<Move> possibleMovesInPosition = game.getDeepCopyOfMoves();
 
             if(moveSortingEnabled){
-                sortMoves(possibleMovesInPosition);
+                FeatureBasedEvaluationMethod.sortMoves(possibleMovesInPosition);
             }
             // always start with the worst for the corresponding player
             double bestValueAtDepth = isMaximizingPlayer ? Integer.MIN_VALUE : Integer.MAX_VALUE;
-            Move bestMove = null;
+            ChessLine bestLine = null;
             int movesDone = 0;
 
-            for(Move move : possibleMovesInPosition){
+            assert possibleMovesInPosition.size() > 0 : "no moves but not game over!";
 
-                // don't execute King captures
-                if(move.isCapture() && move.getCapturedPiece() instanceof King kingUnderAttack){
-                    return kingUnderAttack.color == PieceColor.White ?
-                            new Pair<>(move, (double)Integer.MIN_VALUE) : new Pair<>(move, (double) Integer.MAX_VALUE);
-                }
+            for(Move move : possibleMovesInPosition){
 
                 game.executeMove(move);
                 game.setPossibleMoves(filterMode);
 
                 // reduce recursion depth
-                Pair<Move, Double> moveValuePair = minimax(game, !isMaximizingPlayer, searchDepth - 1, alpha, beta);
-                double valueOfMove = moveValuePair.getValue();
+                ChessLine potentialLine = minimax(game, !isMaximizingPlayer, searchDepth - 1, alpha, beta);
+                potentialLine.addMove(move);
+
+                double valueOfMove = potentialLine.finalEvaluation;
 
                 if((isMaximizingPlayer && valueOfMove > bestValueAtDepth) || (!isMaximizingPlayer && valueOfMove < bestValueAtDepth)){
                     bestValueAtDepth = valueOfMove;
-                    bestMove = move;
+                    bestLine = potentialLine;
                 }
 
                 game.undoLastMove();
@@ -122,6 +140,7 @@ public class Minimax implements Runnable{
                 if(isMaximizingPlayer){
                     if(alphaBetaPruningEnabled && bestValueAtDepth > beta){
                         cutoffReached += 1;
+                        assert bestLine != null : "best line must be set before hand";
                         break;
                     }
                     alpha = Math.max(alpha, bestValueAtDepth);
@@ -129,6 +148,7 @@ public class Minimax implements Runnable{
                 else{
                     if(alphaBetaPruningEnabled && bestValueAtDepth < alpha){
                         cutoffReached += 1;
+                        assert bestLine != null : "best line must be set before hand";
                         break;
                     }
                     beta = Math.min(beta, bestValueAtDepth);
@@ -152,64 +172,72 @@ public class Minimax implements Runnable{
                 transpositionTable.put(game,  bestValueAtDepth);
                 tableEntries += 1;
             }
-            return new Pair<>(bestMove, bestValueAtDepth);
+            return bestLine;
         }
     }
 
-    double getCapturePercentage(List<Move> moves){
-        double captures = 0;
-        for(Move move : moves){
-            if(move.isCapture()){
-                captures += 1;
-            }
-        }
-        return captures / moves.size();
-    }
+    // TODO: add alpha-beta pruning to quiescence search
+    ChessLine quiescenceSearch(Game game, boolean isMaximizingPlayer, double alpha, double beta, int depth) {
 
-    // sort in place
-    public void sortMoves(List<Move> moves){
-        moves.sort((m1, m2) -> {
-            int captureComparison = Integer.compare((m1.isCapture() ? -1 : 1), (m2.isCapture() ? -1 : 1));
-            if(captureComparison != 0){
-                return captureComparison;
-            }
-            // both are captures or non-captures
-            if(m1.isCapture()){
-                // sort by value difference descending (highest one first)
-                double m1ValueDifference = FeatureBasedEvaluationMethod.getPieceValue(m1.getCapturedPiece())
-                        - FeatureBasedEvaluationMethod.getPieceValue(m1.piece);
-                double m2ValueDifference = FeatureBasedEvaluationMethod.getPieceValue(m2.getCapturedPiece())
-                        - FeatureBasedEvaluationMethod.getPieceValue(m2.piece);
-                return Double.compare(m1ValueDifference, m2ValueDifference);
-            }
-            // both are non-captures
-            int promotionComparison = Integer.compare((m1.isPromotion() ? -1 : 1), (m2.isPromotion() ? -1 : 1));
-            if(promotionComparison != 0){
-                return promotionComparison;
-            }
-            // non-capture, non promotion
-            // investigate most mobile pieces first (minus for descending sort)
-            return Integer.compare(-getMobilityScore(m1.piece), -getMobilityScore(m2.piece));
-        });
-    }
+        if (depth == 0 || game.isOver()) {
+            totalNumberPositionsEvaluated += 1;
+            return new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
+        }
+        game.setPossibleMoves(filterMode, true);
+        ChessLine bestLine = new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
 
-    private int getMobilityScore(Piece piece){
-        if(piece instanceof Queen){
-            return 5;
+        // already quiet position
+        if (game.getPossibleCaptures().isEmpty()) {
+            totalNumberPositionsEvaluated += 1;
+            return bestLine;
         }
-        else if(piece instanceof Rook){
-            return 4;
+        double bestValue = isMaximizingPlayer ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+
+        double rawPieceCount = FeatureBasedEvaluationMethod.getRawPieceCount(game);
+
+        List<Move> captureMoves = game.getDeepCopyOfCaptures();
+
+        FeatureBasedEvaluationMethod.sortMoves(captureMoves);
+
+        boolean atMaterialDisadvantage = isMaximizingPlayer ? rawPieceCount < 0 : rawPieceCount > 0;
+        double differenceToCompensate = Math.abs(rawPieceCount);
+
+        for (Move captureMove : captureMoves) {
+
+            // move is not good enough
+            /*
+            if(atMaterialDisadvantage && FeatureBasedEvaluationMethod.getPieceValue(captureMove.getCapturedPiece()) < differenceToCompensate){
+                continue;
+            }
+            */
+
+            // only simulate captures which have immediate reward
+            game.executeMove(captureMove);
+            // new moves are set in next call
+            ChessLine potentialLine = quiescenceSearch(game, !isMaximizingPlayer, alpha, beta, depth - 1);
+            potentialLine.addMove(captureMove);
+
+            if((isMaximizingPlayer && potentialLine.getEvaluation() > bestValue) ||
+                    (!isMaximizingPlayer && potentialLine.getEvaluation() < bestValue)){
+                bestValue = potentialLine.getEvaluation();
+                bestLine = potentialLine;
+            }
+
+            game.undoLastMove();
+
+            if((isMaximizingPlayer && bestValue > beta)
+            || (!isMaximizingPlayer && bestValue < alpha)){
+                break;
+            }
+
+            if(isMaximizingPlayer){
+                alpha = Math.max(alpha, bestValue);
+            }
+            else{
+                beta = Math.min(beta, bestValue);
+            }
         }
-        else if(piece instanceof Bishop){
-            return 3;
-        }
-        else if(piece instanceof Knight){
-            return 2;
-        }
-        else if(piece instanceof King){
-            return 1;
-        }
-        return 0;
+        return bestLine;
     }
 
     @Override
