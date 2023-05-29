@@ -2,6 +2,7 @@ package com.example.chessengine;
 
 public class Move {
     // set them all manually (will be more useful when we do move sorting)
+    private boolean isCheck;
     private boolean isCapture;
     private boolean isPromotion;
     boolean isFirstMove;
@@ -75,6 +76,10 @@ public class Move {
         return isCapture;
     }
 
+    public boolean isCheck(){
+        return isCheck;
+    }
+
     public boolean isEnPassantCapture(){
         return isEnPassantCapture;
     }
@@ -131,15 +136,30 @@ public class Move {
                 || (!pieceMove && piece instanceof Pawn);
     }
     public boolean matchesWithEndingPosition(String s){
-        int additionalSubtraction = s.charAt(s.length()-1) == '+' ? 1 : 0;
-        int col = (s.charAt(s.length() - 2 - additionalSubtraction) - 'a');
-        int row = 7 - (s.charAt(s.length() -1 - additionalSubtraction) - '1');
+
+        int index = 0;
+        for(int i = s.length()-1; i >= 0; i--){
+            index = i;
+            if(Character.isDigit(s.charAt(i))){
+                break;
+            }
+        }
+
+        int row = 7 - (s.charAt(index) - '1');
+        int col = s.charAt(index - 1) - 'a';
+
         return col == endingPosition[0] && row == endingPosition[1];
+    }
+
+    public void markAsCheck(){
+        isCheck = true;
     }
 
     public boolean matchesWithCapture(String s){
         return isCapture == s.contains("x");
     }
+
+    public boolean matchesWithPromotion(String s){return isPromotion == s.contains("="); }
 
     public boolean departureFromFile(char file){
         return piece.x == (file - 'a');

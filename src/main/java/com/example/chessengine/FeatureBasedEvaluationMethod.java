@@ -61,7 +61,7 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         else if(game.getOutcome() == Outcome.BlackWon){
             return Integer.MIN_VALUE;
         }
-        else if(game.getOutcome() == Outcome.Stalemate){
+        else if(game.getOutcome() == Outcome.Stalemate || game.getOutcome() == Outcome.DrawByRepetition){
             return 0;
         }
         else{
@@ -286,6 +286,12 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
     // sort in place
     public static void sortMoves(List<Move> moves){
         moves.sort((m1, m2) -> {
+
+            int checkComparison = Integer.compare((m1.isCheck() ? -1 : 1), (m2.isCheck() ? -1 : 1));
+            if(checkComparison != 0){
+                return checkComparison;
+            }
+
             int captureComparison = Integer.compare((m1.isCapture() ? -1 : 1), (m2.isCapture() ? -1 : 1));
             if(captureComparison != 0){
                 return captureComparison;

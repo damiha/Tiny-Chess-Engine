@@ -1,5 +1,6 @@
 package com.example.chessengine;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
@@ -15,25 +16,17 @@ public class Minimax implements Runnable{
     // base search depth
     int searchDepth = 4;
 
-    int quiescenceDepth = 10;
+    int quiescenceDepth = 6;
     Game game;
     EvaluationMethod evaluationMethod;
     Function<Minimax, Void> updateStatistics;
     Function<Void, Void> sendLifeSign;
     HashMap<Game, Double> transpositionTable;
-    public Minimax(Game game, Function<Minimax, Void> updateStatistics, Function<Void, Void> sendLifeSign, EvaluationMethod evaluationMethod){
-        this.game = game;
-        this.updateStatistics = updateStatistics;
-        this.sendLifeSign = sendLifeSign;
-        this.evaluationMethod = evaluationMethod;
-        this.transpositionTable = new HashMap<>();
-    }
+
 
     int totalNumberPositionsEvaluated = 0;
-    int positionsEvaluatedPerSecond = 0;
     int cutoffReached = 0;
     long start;
-    double runtimeInSeconds = 0.0;
     double bestValue = 0.0;
     double percentageDone = 0.0;
     Move bestMove = null;
@@ -45,27 +38,28 @@ public class Minimax implements Runnable{
     FilterMode filterMode = FilterMode.AllMoves;
     boolean autoQueenActivated = true;
     boolean transpositionTablesEnabled = true;
-
     boolean quiescenceSearchEnabled = true;
+
+    boolean showPrincipalVariation = false;
 
     int tableEntries = 0;
     int cacheHits = 0;
-
+    Move[] bestLine;
     // then, it's invoking the update function
     int lifeSignEvery = 100000;
+    public Minimax(Game game, Function<Minimax, Void> updateStatistics, Function<Void, Void> sendLifeSign, EvaluationMethod evaluationMethod){
+        this.game = game;
+        this.updateStatistics = updateStatistics;
+        this.sendLifeSign = sendLifeSign;
+        this.evaluationMethod = evaluationMethod;
+        this.transpositionTable = new HashMap<>();
+    }
 
     public Move getEngineMove(){
 
         start = System.currentTimeMillis();
 
-        double alpha = Integer.MIN_VALUE;
-        double beta = Integer.MAX_VALUE;
-        ChessLine bestLine = minimax(game, game.whoseTurn == PieceColor.White, searchDepth, alpha, beta);
-
-        System.out.println(bestLine);
-
-        bestValue = bestLine.getEvaluation();
-        bestMove = bestLine.getMove();
+        bestMove = moveFromAlphaBeta();
 
         updateStatistics.apply(this);
 
@@ -77,13 +71,14 @@ public class Minimax implements Runnable{
         return bestMove;
     }
 
+    // TODO: ADD QUIESCENCE SEARCH HERE
     public ChessLine minimax(Game game, boolean isMaximizingPlayer, int searchDepth, double alpha, double beta){
 
         if(game.isOver()){
-            totalNumberPositionsEvaluated++;
-            return new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
+            return getChessLineFromGame(game);
         }
         else if(searchDepth == 0){
+            /*
             if(quiescenceSearchEnabled) {
                 ChessLine quiescenceLine = quiescenceSearch(game, isMaximizingPlayer, alpha, beta, quiescenceDepth);
                 String boardBeforeQuiescence = game.toString();
@@ -95,9 +90,10 @@ public class Minimax implements Runnable{
                 return mainLine;
             }
             else{
-                totalNumberPositionsEvaluated++;
-                return new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
+                return getChessLineFromGame(game);
             }
+            */
+            return getChessLineFromGame(game);
         }
         else{
             // table hit can never happen on toplevel so its fine to not return a move
@@ -140,7 +136,6 @@ public class Minimax implements Runnable{
                 if(isMaximizingPlayer){
                     if(alphaBetaPruningEnabled && bestValueAtDepth > beta){
                         cutoffReached += 1;
-                        assert bestLine != null : "best line must be set before hand";
                         break;
                     }
                     alpha = Math.max(alpha, bestValueAtDepth);
@@ -148,7 +143,6 @@ public class Minimax implements Runnable{
                 else{
                     if(alphaBetaPruningEnabled && bestValueAtDepth < alpha){
                         cutoffReached += 1;
-                        assert bestLine != null : "best line must be set before hand";
                         break;
                     }
                     beta = Math.min(beta, bestValueAtDepth);
@@ -156,89 +150,145 @@ public class Minimax implements Runnable{
 
                 movesDone++;
 
-                // update statistics after done
-                if(searchDepth == this.searchDepth){
-                    this.percentageDone = (double) movesDone / possibleMovesInPosition.size();
-                    this.bestValue = bestValueAtDepth;
-                    numberOfTopLevelBranches = possibleMovesInPosition.size();
-                    updateStatistics.apply(this);
-                }
-                else if(totalNumberPositionsEvaluated % lifeSignEvery == 0){
-                    sendLifeSign.apply(null);
-                }
+                updateStatisticsAndSendLifeSign(movesDone, numberOfTopLevelBranches, bestValueAtDepth);
             }
 
-            if(transpositionTablesEnabled){
-                transpositionTable.put(game,  bestValueAtDepth);
-                tableEntries += 1;
-            }
+            addToTranspositionTable(game, bestValueAtDepth);
+
             return bestLine;
         }
     }
 
-    // TODO: add alpha-beta pruning to quiescence search
-    ChessLine quiescenceSearch(Game game, boolean isMaximizingPlayer, double alpha, double beta, int depth) {
-
-        if (depth == 0 || game.isOver()) {
-            totalNumberPositionsEvaluated += 1;
-            return new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
+    // from chessprogramming.org
+    // always uses quiescence search and sorting
+    // color = white(1) or black(-1)
+    public double alphaBeta(double alpha, double beta, int depth, int color, Move[] line){
+        if(depth == searchDepth || game.isOver()){
+            return quiesce(alpha, beta, color, quiescenceDepth);
         }
-        game.setPossibleMoves(filterMode, true);
-        ChessLine bestLine = new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
 
-        // already quiet position
-        if (game.getPossibleCaptures().isEmpty()) {
-            totalNumberPositionsEvaluated += 1;
-            return bestLine;
-        }
-        double bestValue = isMaximizingPlayer ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+        game.setPossibleMoves(filterMode, false);
+        List<Move> possibleMoves = game.getDeepCopyOfMoves();
+        FeatureBasedEvaluationMethod.sortMoves(possibleMoves);
 
-        double rawPieceCount = FeatureBasedEvaluationMethod.getRawPieceCount(game);
+        for(Move move : possibleMoves){
 
-        List<Move> captureMoves = game.getDeepCopyOfCaptures();
+            Move[] potLine = new Move[searchDepth];
 
-        FeatureBasedEvaluationMethod.sortMoves(captureMoves);
-
-        boolean atMaterialDisadvantage = isMaximizingPlayer ? rawPieceCount < 0 : rawPieceCount > 0;
-        double differenceToCompensate = Math.abs(rawPieceCount);
-
-        for (Move captureMove : captureMoves) {
-
-            // move is not good enough
-            /*
-            if(atMaterialDisadvantage && FeatureBasedEvaluationMethod.getPieceValue(captureMove.getCapturedPiece()) < differenceToCompensate){
-                continue;
-            }
-            */
-
-            // only simulate captures which have immediate reward
-            game.executeMove(captureMove);
-            // new moves are set in next call
-            ChessLine potentialLine = quiescenceSearch(game, !isMaximizingPlayer, alpha, beta, depth - 1);
-            potentialLine.addMove(captureMove);
-            // added comment
-
-            if((isMaximizingPlayer && potentialLine.getEvaluation() > bestValue) ||
-                    (!isMaximizingPlayer && potentialLine.getEvaluation() < bestValue)){
-                bestValue = potentialLine.getEvaluation();
-                bestLine = potentialLine;
-            }
-
+            game.executeMove(move);
+            double score = -alphaBeta(-beta, -alpha, depth + 1, -color, potLine);
             game.undoLastMove();
 
-            if((isMaximizingPlayer && bestValue > beta)
-            || (!isMaximizingPlayer && bestValue < alpha)){
-                break;
+            if(score >= beta){
+                cutoffReached++;
+                return beta;
             }
+            if(score > alpha){
+                alpha = score;
 
-            if(isMaximizingPlayer){
-                alpha = Math.max(alpha, bestValue);
-            }
-            else{
-                beta = Math.min(beta, bestValue);
+                for(int d = depth + 1; d < potLine.length; d++)
+                    line[d] = potLine[d];
+                line[depth] = move;
             }
         }
-        return bestLine;
+        return alpha;
+    }
+
+    double quiesce(double alpha, double beta, int color, int depth){
+
+        totalNumberPositionsEvaluated++;
+        double standPat = color * evaluationMethod.staticEvaluation(game);
+
+        if(depth == 0 || game.isOver()){
+            return standPat;
+        }
+
+        if( standPat >= beta){
+            return beta;
+        }
+        if(alpha < standPat){
+            alpha = standPat;
+        }
+
+        game.setPossibleMoves(filterMode, true);
+        List<Move> possibleChecksAndCaptures = game.getDeepCopyOfChecksAndCaptures();
+        FeatureBasedEvaluationMethod.sortMoves(possibleChecksAndCaptures);
+
+        for(Move move : possibleChecksAndCaptures){
+            game.executeMove(move);
+            double score = -quiesce(-beta, -alpha, -color, depth - 1);
+            game.undoLastMove();
+
+            if(score >= beta){
+                return beta;
+            }
+            if(score > alpha){
+                alpha = score;
+            }
+        }
+        return alpha;
+    }
+
+    Move moveFromAlphaBeta(){
+
+        game.setPossibleMoves(filterMode, false);
+        List<Move> possibleMoves = game.getDeepCopyOfMoves();
+        FeatureBasedEvaluationMethod.sortMoves(possibleMoves);
+
+        int movesDone = 0;
+        int numberOfTopLevelBranches = possibleMoves.size();
+
+        double bestValue = Integer.MIN_VALUE;
+        Move bestMove = null;
+
+        int color = game.whoseTurn == PieceColor.White ? 1 : -1;
+
+        for(Move move : possibleMoves){
+
+            Move[] line = new Move[searchDepth];
+            line[0] = move;
+
+            game.executeMove(move);
+            double score = -alphaBeta(Integer.MIN_VALUE, Integer.MAX_VALUE, 1, -color, line);
+            game.undoLastMove();
+
+            if(score > bestValue){
+                bestValue = score;
+                bestMove = move;
+                bestLine = line;
+            }
+
+            movesDone++;
+
+            updateStatisticsAndSendLifeSign(movesDone, numberOfTopLevelBranches, bestValue);
+        }
+
+        this.bestValue = bestValue;
+        return bestMove;
+    }
+
+    void addToTranspositionTable(Game game, double bestValueAtDepth){
+        if(transpositionTablesEnabled){
+            transpositionTable.put(game,  bestValueAtDepth);
+            tableEntries += 1;
+        }
+    }
+
+    void updateStatisticsAndSendLifeSign(int movesDone, int numberOfTopLevelBranches, double bestValueAtDepth){
+        // update statistics after done
+        this.percentageDone = (double) movesDone / numberOfTopLevelBranches;
+        this.bestValue = bestValueAtDepth;
+        this.numberOfTopLevelBranches = numberOfTopLevelBranches;
+        updateStatistics.apply(this);
+
+        if(totalNumberPositionsEvaluated % lifeSignEvery == 0){
+            sendLifeSign.apply(null);
+        }
+    }
+
+    ChessLine getChessLineFromGame(Game game){
+        totalNumberPositionsEvaluated++;
+        return new ChessLine(game.toString(), evaluationMethod.staticEvaluation(game));
     }
 
     @Override

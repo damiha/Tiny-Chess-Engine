@@ -49,7 +49,8 @@ public class ManagementGUI {
                 case WhiteWon -> "White won!";
                 case BlackWon -> "Black won!";
                 case Stalemate -> "Stalemate!";
-                default -> throw new RuntimeException("Game is open so why final screen?");
+                case DrawByRepetition -> "Draw by Repetition";
+                default -> "Game not over so why final screen";
             };
             gc.fillText(finalText, x, y);
         }

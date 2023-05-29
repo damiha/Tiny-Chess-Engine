@@ -144,7 +144,15 @@ public class GameGUI {
                 x = offsetX + move.endingPosition[0] * tileLength;
                 y = offsetY + move.endingPosition[1] * tileLength;
             }
-            gc.setFill(Color.RED);
+            if(move.isCheck()) {
+                gc.setFill(Color.RED);
+            }
+            else if(move.isCapture()){
+                gc.setFill(Color.GOLDENROD);
+            }
+            else{
+                gc.setFill(Color.BLUE);
+            }
             // fill oval uses diameter
             gc.fillOval(x + tileLength / 2 - cursorRadius, y + tileLength / 2 - cursorRadius,
                     2 * cursorRadius, 2 * cursorRadius);

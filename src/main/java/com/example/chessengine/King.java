@@ -7,6 +7,7 @@ public class King extends Piece{
 
     boolean canShortCastle, canLongCastle;
     boolean hasCastledShort, hasCastledLong;
+
     public King(PieceColor color, int x, int y, Game game) {
         super(color, x, y, game);
 

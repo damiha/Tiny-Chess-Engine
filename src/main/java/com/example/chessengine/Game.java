@@ -20,12 +20,14 @@ public class Game {
     Stack<String> history;
     Stack<String> boardHistory;
 
-    boolean debugOn = true;
+    boolean debugOn = false;
     boolean enPassantEnabled = true;
     ArrayList<Move> possibleMovesInCurrentPosition;
 
     // for quiescence search
-    ArrayList<Move> possibleCapturesInCurrentPosition;
+    ArrayList<Move> possibleChecksAndCaptures;
+
+    HashMap<String, Integer> repetitionsPerPosition;
 
     Outcome outcome;
 
@@ -42,11 +44,12 @@ public class Game {
         storedCastleRights = new Stack<>();
 
         possibleMovesInCurrentPosition = new ArrayList<>();
-        possibleCapturesInCurrentPosition = new ArrayList<>();
+        possibleChecksAndCaptures = new ArrayList<>();
+
+        repetitionsPerPosition = new HashMap<>();
+        outcome = Outcome.Open;
 
         setPossibleMoves(FilterMode.AllMoves);
-
-        outcome = Outcome.Open;
     }
 
     Piece[] getPieceRow(PieceColor color){
@@ -96,6 +99,12 @@ public class Game {
     // TODO: update rights
     void undoLastMove(){
         if(!executedMoves.isEmpty()) {
+
+            // delete for 3-fold repetition rule
+            String boardString = GameUtils.boardToString(this);
+            int repetitionsOfReachedPosition = repetitionsPerPosition.get(boardString);
+            repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition - 1);
+
             Move move = executedMoves.pop();
 
             if(move.isCastle()){
@@ -169,6 +178,7 @@ public class Game {
     void movePiece(int[] startingPosition, int[] endingPosition){
         Piece toBeMoved = getPieceAt(startingPosition);
         assert toBeMoved != null : "can't move non-existing piece";
+
         placePieceAt(toBeMoved, endingPosition);
         placePieceAt(null, startingPosition);
 
@@ -242,8 +252,6 @@ public class Game {
         updateCastleRights(move);
         updatePawnRights(move);
 
-        // TODO: change pawn to whatever player wants (popup window)
-        // for now always promote to queen
         if(move.isPromotion()){
             placePieceAt(move.getPromotedTo(), move.endingPosition);
         }
@@ -251,6 +259,14 @@ public class Game {
         if(debugOn) {
             history.push(move.toString());
             boardHistory.push(this.toString());
+        }
+
+        String boardString = GameUtils.boardToString(this);
+        int repetitionsOfReachedPosition = repetitionsPerPosition.getOrDefault(boardString, 0) + 1;
+        repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition);
+
+        if(repetitionsOfReachedPosition == 3){
+            outcome = Outcome.DrawByRepetition;
         }
 
         executedMoves.push(move);
@@ -296,7 +312,7 @@ public class Game {
     }
 
     // for quiescence search
-    List<Move> getPossibleCaptures(){return possibleCapturesInCurrentPosition; }
+    List<Move> getPossibleChecksAndCaptures(){return possibleChecksAndCaptures; }
 
     public List<Move> getMovesOfSelectedPiece(Piece selectedPiece){
         ArrayList<Move> movesOfSelectedPiece = new ArrayList<>();
@@ -311,9 +327,14 @@ public class Game {
     void setPossibleMoves(FilterMode filterMode){
         setPossibleMoves(filterMode, false);
     }
-    void setPossibleMoves(FilterMode filterMode, boolean onlyCaptures){
+    void setPossibleMoves(FilterMode filterMode, boolean onlyChecksAndCaptures){
 
-        List<Move> movesToUpdate = onlyCaptures ? possibleCapturesInCurrentPosition : possibleMovesInCurrentPosition;
+        // does nothing if game is over
+        if(isOver()){
+            return;
+        }
+
+        List<Move> movesToUpdate = onlyChecksAndCaptures ? possibleChecksAndCaptures : possibleMovesInCurrentPosition;
 
         movesToUpdate.clear();
 
@@ -321,8 +342,10 @@ public class Game {
         if(filterMode == FilterMode.AllMoves){
 
             King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
+            King kingToBeAttacked = whoseTurn == PieceColor.White ? blackKing : whiteKing;
 
             Set<Piece> defenders = getDefenders(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
+            HashMap<String, CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
 
             PieceColor oppositeColor = whoseTurn.getOppositeColor();
             boolean kingInCheck = isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y);
@@ -337,14 +360,34 @@ public class Game {
                         Piece pieceToBeMoved = position[y][x];
                         List<Move> possiblePieceMoves = pieceToBeMoved.getPossibleMoves();
 
-                        if(onlyCaptures){
-                            possiblePieceMoves = possiblePieceMoves.stream().filter(Move::isCapture).toList();
+                        for(Move mv : possiblePieceMoves){
+                            if(mv.startingPosition[0] == mv.endingPosition[0] && mv.startingPosition[1] == mv.endingPosition[1]){
+                                System.out.println(pieceToBeMoved);
+                            }
+                        }
+
+                        // if destination is a square were check can be given and the piece has the right type, mark as check
+                        for(Move move : possiblePieceMoves){
+                            if(checkSquares.containsKey(GameUtils.coordsToString(move.endingPosition))){
+                                CheckSquare square = checkSquares.get(GameUtils.coordsToString(move.endingPosition));
+                                if((square.checkByPawn && pieceToBeMoved instanceof Pawn)
+                                        || (square.checkByBishop && (pieceToBeMoved instanceof Bishop || pieceToBeMoved instanceof Queen))
+                                        || (square.checkByKnight && pieceToBeMoved instanceof Knight)
+                                        || (square.checkByRook && (pieceToBeMoved instanceof Rook || pieceToBeMoved instanceof Queen))){
+                                    move.markAsCheck();
+                                }
+                            }
+                        }
+
+
+                        if(onlyChecksAndCaptures){
+                            possiblePieceMoves = possiblePieceMoves.stream().filter(m -> m.isCapture() || m.isCheck()).toList();
                         }
 
                         boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !defenders.contains(pieceToBeMoved));
 
                         if(checkNotNecessary){
-                            if(!onlyCaptures) {
+                            if(!onlyChecksAndCaptures) {
                                 pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
                             }
                             movesToUpdate.addAll(possiblePieceMoves);
@@ -367,7 +410,7 @@ public class Game {
                                 executeMove(candidateMove);
                                 if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
                                     movesToUpdate.add(candidateMove);
-                                    if(!onlyCaptures) {
+                                    if(!onlyChecksAndCaptures) {
                                         pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
                                     }
                                 }
@@ -471,6 +514,23 @@ public class Game {
         return defenders;
     }
 
+    HashMap<String, CheckSquare> getCheckSquares(King kingToBeAttacked){
+        HashMap<String, CheckSquare> squares = new HashMap<>();
+        // diagonals so bishop moves
+        List<BiFunction<int[], Integer, int[]>> diagonals = List.of(getULDiagonal, getURDiagonal, getLLDiagonal, getLRDiagonal);
+        for(BiFunction<int[], Integer, int[]> getLocation : diagonals){
+            addCheckSquaresOnPath(squares, kingToBeAttacked, getLocation, "diagonal");
+        }
+        // vertical/horizontal moves
+        List<BiFunction<int[], Integer, int[]>> lines = List.of(getLeft, getRight, getUp, getDown);
+        for(BiFunction<int[], Integer, int[]> getLocation : lines){
+            addCheckSquaresOnPath(squares, kingToBeAttacked, getLocation, "straight");
+        }
+        // knight moves
+        addCheckSquaresOnPath(squares, kingToBeAttacked, getKnightMoves, "knight");
+        return squares;
+    }
+
     boolean canDiagonallyCapture(Piece piece, int x, int y){
         if(piece instanceof Pawn){
             boolean pawnNextToKing = Math.abs(piece.x - x) == 1;
@@ -521,6 +581,46 @@ public class Game {
         }
         return null;
     }
+    public void addCheckSquaresOnPath(HashMap<String, CheckSquare> checkSquares, King kingToBeAttacked, BiFunction<int[], Integer, int[]> getLocation, String movement){
+
+        // no path on a chess board is longer than 8 squares
+        for(int i = 1;i < 8;i++){
+            int[] location = getLocation.apply(new int[]{kingToBeAttacked.x, kingToBeAttacked.y}, i);
+
+            Piece pieceAtLocation = getPieceAt(location);
+
+            // check given by going to empty square on kings path or capturing piece that protects him
+            if(pieceAtLocation == null || pieceAtLocation.color == kingToBeAttacked.color){
+                CheckSquare checkSquare = new CheckSquare(location[0], location[1]);
+
+                if(movement.equals("straight")){
+                    checkSquare.checkByRook = true;
+                }
+                else if(movement.equals("knight")){
+                    checkSquare.checkByKnight = true;
+                }
+                else if(movement.equals("diagonal")){
+                    checkSquare.checkByBishop = true;
+                    boolean towardsKing = (kingToBeAttacked.color == PieceColor.White && location[1] < kingToBeAttacked.y)
+                            || (kingToBeAttacked.color == PieceColor.Black && location[1] > kingToBeAttacked.y);
+
+                    boolean pawnCanCapture = towardsKing && i == 1;
+
+                    if(pawnCanCapture){
+                        checkSquare.checkByPawn = true;
+                    }
+                }
+
+                checkSquares.put(GameUtils.coordsToString(location), checkSquare);
+
+                // capture of defender with check stops straight and diagonal movement
+                if(!movement.equals("knight") && pieceAtLocation != null){
+                    break;
+                }
+            }
+        }
+    }
+
     ArrayList<Move> getDeepCopyOfMoves(){
         ArrayList<Move> deepCopyOfMoves = new ArrayList<>();
         for(Move move : getPossibleMoves()){
@@ -528,12 +628,12 @@ public class Game {
         }
         return deepCopyOfMoves;
     }
-    ArrayList<Move> getDeepCopyOfCaptures(){
-        ArrayList<Move> deepCopyOfCaptures = new ArrayList<>();
-        for(Move move : getPossibleCaptures()){
-            deepCopyOfCaptures.add(move.getDeepCopy());
+    ArrayList<Move> getDeepCopyOfChecksAndCaptures(){
+        ArrayList<Move> deepCopyOfChecksAndCaptures = new ArrayList<>();
+        for(Move move : getPossibleChecksAndCaptures()){
+            deepCopyOfChecksAndCaptures.add(move.getDeepCopy());
         }
-        return deepCopyOfCaptures;
+        return deepCopyOfChecksAndCaptures;
     }
     // TODO: extend this
     public void loadFromPGN(File file){
