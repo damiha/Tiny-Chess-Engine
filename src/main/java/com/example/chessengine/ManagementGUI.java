@@ -50,6 +50,7 @@ public class ManagementGUI {
                 case BlackWon -> "Black won!";
                 case Stalemate -> "Stalemate!";
                 case DrawByRepetition -> "Draw by Repetition";
+                case DrawBy50MoveRule -> "Draw by 50 move rule";
                 default -> "Game not over so why final screen";
             };
             gc.fillText(finalText, x, y);

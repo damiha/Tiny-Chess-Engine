@@ -166,7 +166,9 @@ public class GameGUI {
 
         gc.setFill(Color.BLACK);
         for(int i = 0; i < lines.length; i++){
-            gc.fillText(lines[i], panelX + lineGap, panelY + lineHeight * (i + 1));
+            if(lines[i] != null) {
+                gc.fillText(lines[i], panelX + lineGap, panelY + lineHeight * (i + 1));
+            }
         }
     }
 

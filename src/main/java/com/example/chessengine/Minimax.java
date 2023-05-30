@@ -1,6 +1,5 @@
 package com.example.chessengine;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
@@ -12,11 +11,13 @@ public class Minimax implements Runnable{
     boolean alphaBetaPruningEnabled = true;
     boolean moveSortingEnabled = true;
 
+    boolean fullDepthReachedOnce = false;
+
     // in half moves (always uneven so enemy has the advantage)
     // base search depth
-    int searchDepth = 4;
+    int searchDepth = 5;
 
-    int quiescenceDepth = 6;
+    int quiescenceDepth = 5;
     Game game;
     EvaluationMethod evaluationMethod;
     Function<Minimax, Void> updateStatistics;
@@ -35,18 +36,25 @@ public class Minimax implements Runnable{
     Thread thread;
     boolean isFinished;
 
+    int lowerBoundMovesPerSecond = 1000;
+    double winMargin = 9.0;
+
     FilterMode filterMode = FilterMode.AllMoves;
     boolean autoQueenActivated = true;
-    boolean transpositionTablesEnabled = true;
+    boolean transpositionTablesEnabled = false;
     boolean quiescenceSearchEnabled = true;
-
-    boolean showPrincipalVariation = false;
 
     int tableEntries = 0;
     int cacheHits = 0;
     Move[] bestLine;
+
+    double runtimeInSeconds;
+    int positionsEvaluatedPerSecond;
     // then, it's invoking the update function
-    int lifeSignEvery = 100000;
+    int millisBetweenLifeSigns = 1000;
+    int millisSinceLastLifeSign = 1000;
+    long timeStampLastLifeSign;
+
     public Minimax(Game game, Function<Minimax, Void> updateStatistics, Function<Void, Void> sendLifeSign, EvaluationMethod evaluationMethod){
         this.game = game;
         this.updateStatistics = updateStatistics;
@@ -150,10 +158,10 @@ public class Minimax implements Runnable{
 
                 movesDone++;
 
-                updateStatisticsAndSendLifeSign(movesDone, numberOfTopLevelBranches, bestValueAtDepth);
+                updateStatisticsOnTopLevel(movesDone, numberOfTopLevelBranches, bestValueAtDepth);
             }
 
-            addToTranspositionTable(game, bestValueAtDepth);
+            addToTranspositionTableIfEnabled(game, bestValueAtDepth);
 
             return bestLine;
         }
@@ -162,21 +170,41 @@ public class Minimax implements Runnable{
     // from chessprogramming.org
     // always uses quiescence search and sorting
     // color = white(1) or black(-1)
+    // new moves are set in call above
     public double alphaBeta(double alpha, double beta, int depth, int color, Move[] line){
-        if(depth == searchDepth || game.isOver()){
-            return quiesce(alpha, beta, color, quiescenceDepth);
+
+        if(transpositionTablesEnabled && transpositionTable.containsKey(game)){
+            cacheHits += 1;
+            return transpositionTable.get(game);
         }
 
-        game.setPossibleMoves(filterMode, false);
+        if(depth == searchDepth || game.isOver()){
+            double evaluation;
+            if(quiescenceSearchEnabled){
+                evaluation = quiesce(alpha, beta, color, quiescenceDepth);
+            }
+            else{
+                evaluation = quiesce(alpha, beta, color, 0);
+            }
+            addToTranspositionTableIfEnabled(game, evaluation);
+            return evaluation;
+        }
+
+        sendLifeSignAtInterval();
+
+        // correct moves are already set
         List<Move> possibleMoves = game.getDeepCopyOfMoves();
-        FeatureBasedEvaluationMethod.sortMoves(possibleMoves);
+        sortMovesIfEnabled(possibleMoves);
 
         for(Move move : possibleMoves){
 
             Move[] potLine = new Move[searchDepth];
 
             game.executeMove(move);
+            game.setPossibleMoves(filterMode, false);
+
             double score = -alphaBeta(-beta, -alpha, depth + 1, -color, potLine);
+
             game.undoLastMove();
 
             if(score >= beta){
@@ -191,15 +219,20 @@ public class Minimax implements Runnable{
                 line[depth] = move;
             }
         }
+        addToTranspositionTableIfEnabled(game, alpha);
         return alpha;
     }
-
+    // when directly game over, we have call from above
     double quiesce(double alpha, double beta, int color, int depth){
 
         totalNumberPositionsEvaluated++;
         double standPat = color * evaluationMethod.staticEvaluation(game);
 
         if(depth == 0 || game.isOver()){
+
+            if(depth == 0){
+                fullDepthReachedOnce = true;
+            }
             return standPat;
         }
 
@@ -210,13 +243,19 @@ public class Minimax implements Runnable{
             alpha = standPat;
         }
 
-        game.setPossibleMoves(filterMode, true);
+        // every other call can be sure that caller invoked setPossibleMoves()
+        if(depth == quiescenceDepth){
+            game.setPossibleMoves(filterMode, true);
+        }
         List<Move> possibleChecksAndCaptures = game.getDeepCopyOfChecksAndCaptures();
-        FeatureBasedEvaluationMethod.sortMoves(possibleChecksAndCaptures);
+        sortMovesIfEnabled(possibleChecksAndCaptures);
 
         for(Move move : possibleChecksAndCaptures){
             game.executeMove(move);
+            game.setPossibleMoves(filterMode, true);
+
             double score = -quiesce(-beta, -alpha, -color, depth - 1);
+
             game.undoLastMove();
 
             if(score >= beta){
@@ -229,11 +268,16 @@ public class Minimax implements Runnable{
         return alpha;
     }
 
+    void sortMovesIfEnabled(List<Move> possibleMoves){
+        if(moveSortingEnabled){
+            FeatureBasedEvaluationMethod.sortMoves(possibleMoves);
+        }
+    }
+
     Move moveFromAlphaBeta(){
 
-        game.setPossibleMoves(filterMode, false);
         List<Move> possibleMoves = game.getDeepCopyOfMoves();
-        FeatureBasedEvaluationMethod.sortMoves(possibleMoves);
+        sortMovesIfEnabled(possibleMoves);
 
         int movesDone = 0;
         int numberOfTopLevelBranches = possibleMoves.size();
@@ -249,7 +293,10 @@ public class Minimax implements Runnable{
             line[0] = move;
 
             game.executeMove(move);
+            game.setPossibleMoves(filterMode, false);
+
             double score = -alphaBeta(Integer.MIN_VALUE, Integer.MAX_VALUE, 1, -color, line);
+
             game.undoLastMove();
 
             if(score > bestValue){
@@ -260,29 +307,52 @@ public class Minimax implements Runnable{
 
             movesDone++;
 
-            updateStatisticsAndSendLifeSign(movesDone, numberOfTopLevelBranches, bestValue);
+            updateStatisticsOnTopLevel(movesDone, numberOfTopLevelBranches, bestValue);
+
+            // good enough move was found with full quiescence search
+            // or too slow to make serious progress (end search and risk to lose)
+            if((fullDepthReachedOnce && score > winMargin) || runtimeInSeconds > 60){
+                break;
+            }
         }
 
         this.bestValue = bestValue;
         return bestMove;
     }
 
-    void addToTranspositionTable(Game game, double bestValueAtDepth){
+    void addToTranspositionTableIfEnabled(Game game, double bestValueAtDepth){
         if(transpositionTablesEnabled){
             transpositionTable.put(game,  bestValueAtDepth);
             tableEntries += 1;
         }
     }
 
-    void updateStatisticsAndSendLifeSign(int movesDone, int numberOfTopLevelBranches, double bestValueAtDepth){
-        // update statistics after done
+    void updateStatisticsOnTopLevel(int movesDone, int numberOfTopLevelBranches, double bestValueAtDepth){
+
+        updateTimeDependentStatistics();
         this.percentageDone = (double) movesDone / numberOfTopLevelBranches;
         this.bestValue = bestValueAtDepth;
         this.numberOfTopLevelBranches = numberOfTopLevelBranches;
         updateStatistics.apply(this);
+    }
 
-        if(totalNumberPositionsEvaluated % lifeSignEvery == 0){
+    void updateTimeDependentStatistics(){
+        long runtimeInMillis = System.currentTimeMillis() - start;
+        // update statistics after done
+        this.runtimeInSeconds = runtimeInMillis / 1000.0;
+        this.positionsEvaluatedPerSecond = (int) (totalNumberPositionsEvaluated / runtimeInSeconds);
+    }
+
+    void sendLifeSignAtInterval(){
+        if(millisSinceLastLifeSign > millisBetweenLifeSigns){
+            millisSinceLastLifeSign = 0;
+            timeStampLastLifeSign = System.currentTimeMillis();
             sendLifeSign.apply(null);
+
+            updateTimeDependentStatistics();
+        }
+        else{
+            millisSinceLastLifeSign = (int) (System.currentTimeMillis() - timeStampLastLifeSign);
         }
     }
 

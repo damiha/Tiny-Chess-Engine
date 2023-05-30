@@ -31,6 +31,12 @@ public class Game {
 
     Outcome outcome;
 
+    int repetitionsOfReachedPosition;
+
+    // for 50 move rule
+    Stack<Integer> storedNumberOfMovesWithoutProgress;
+    int numberOfMovesWithoutProgress;
+
     public Game(){
         position = getStartingPosition();
         whoseTurn = PieceColor.White;
@@ -48,6 +54,8 @@ public class Game {
 
         repetitionsPerPosition = new HashMap<>();
         outcome = Outcome.Open;
+        storedNumberOfMovesWithoutProgress = new Stack<>();
+        numberOfMovesWithoutProgress = 0;
 
         setPossibleMoves(FilterMode.AllMoves);
     }
@@ -102,10 +110,11 @@ public class Game {
 
             // delete for 3-fold repetition rule
             String boardString = GameUtils.boardToString(this);
-            int repetitionsOfReachedPosition = repetitionsPerPosition.get(boardString);
-            repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition - 1);
+            repetitionsOfReachedPosition = repetitionsPerPosition.get(boardString) - 1;
+            repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition);
 
             Move move = executedMoves.pop();
+            numberOfMovesWithoutProgress = storedNumberOfMovesWithoutProgress.pop();
 
             if(move.isCastle()){
                 undoCastling(move);
@@ -135,6 +144,9 @@ public class Game {
             // if a move was executed, game must have been open beforehand
             outcome = Outcome.Open;
             changeTurns();
+
+            // load old repetition value
+            repetitionsOfReachedPosition = repetitionsPerPosition.getOrDefault(GameUtils.boardToString(this), 1);
         }
     }
 
@@ -236,6 +248,15 @@ public class Game {
         assert !(move.getCapturedPiece() instanceof King) : "ERROR: illegal king capture!";
 
         storedCastleRights.push(new CastleRights(whiteKing, blackKing));
+        storedNumberOfMovesWithoutProgress.push(numberOfMovesWithoutProgress);
+
+        // for 50 move rule
+        if(move.isCapture() || move.piece instanceof Pawn){
+            numberOfMovesWithoutProgress = 0;
+        }
+        else{
+            numberOfMovesWithoutProgress++;
+        }
 
         // move rook as well (we assume its at the right position
         if(move.isCastle()){
@@ -262,15 +283,23 @@ public class Game {
         }
 
         String boardString = GameUtils.boardToString(this);
-        int repetitionsOfReachedPosition = repetitionsPerPosition.getOrDefault(boardString, 0) + 1;
+        repetitionsOfReachedPosition = repetitionsPerPosition.getOrDefault(boardString, 0) + 1;
         repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition);
 
         if(repetitionsOfReachedPosition == 3){
             outcome = Outcome.DrawByRepetition;
         }
+        if(numberOfMovesWithoutProgress == 50){
+            outcome = Outcome.DrawBy50MoveRule;
+        }
 
         executedMoves.push(move);
+
         changeTurns();
+    }
+
+    int getRepetitionsOfCurrentPosition(){
+        return repetitionsOfReachedPosition;
     }
 
     private void removeCastleRightAfterRookCapture(Rook capturedRook){
@@ -480,7 +509,7 @@ public class Game {
         List<BiFunction<int[], Integer, int[]>> lines = List.of(getLeft, getRight, getUp, getDown);
         for(BiFunction<int[], Integer, int[]> getLocation : lines){
             Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
-            if(firstPieceOnPath != null && firstPieceOnPath.color == color && isStraightMovingPiece(firstPieceOnPath)){
+            if(firstPieceOnPath != null && firstPieceOnPath.color == color && canCaptureStraight(firstPieceOnPath, x, y)){
                 return true;
             }
         }
@@ -536,12 +565,22 @@ public class Game {
             boolean pawnNextToKing = Math.abs(piece.x - x) == 1;
             boolean kingInFrontOfPawn = piece.color == PieceColor.White ? y < piece.y : y > piece.y;
             return pawnNextToKing && kingInFrontOfPawn;
+        }
+        else if(piece instanceof  King) {
+
+            boolean kingCloseEnoughX = Math.abs(x - piece.x) <=1;
+            boolean kingCloseEnoughY = Math.abs(y - piece.y) <= 1;
+
+            return kingCloseEnoughX && kingCloseEnoughY;
         }else{
             return piece instanceof Bishop || piece instanceof Queen;
         }
     }
-    boolean isStraightMovingPiece(Piece piece){
-        return piece instanceof Rook || piece instanceof Queen;
+    boolean canCaptureStraight(Piece piece, int x, int y){
+        boolean kingCloseEnoughX = Math.abs(x - piece.x) <=1;
+        boolean kingCloseEnoughY = Math.abs(y - piece.y) <= 1;
+
+        return piece instanceof Rook || piece instanceof Queen || (piece instanceof King && kingCloseEnoughX && kingCloseEnoughY);
     }
     public BiFunction<int[], Integer, int[]> getULDiagonal = (pos, i) -> new int[]{pos[0] - i, pos[1] - i};
     public BiFunction<int[], Integer, int[]> getURDiagonal = (pos, i) -> new int[]{pos[0] + i, pos[1] - i};
@@ -589,8 +628,10 @@ public class Game {
 
             Piece pieceAtLocation = getPieceAt(location);
 
+            boolean canGiveCheckOnEmptySquare = pieceAtLocation == null;
+            boolean canGiveCheckByCapturing =  pieceAtLocation != null && pieceAtLocation.color == kingToBeAttacked.color;
             // check given by going to empty square on kings path or capturing piece that protects him
-            if(pieceAtLocation == null || pieceAtLocation.color == kingToBeAttacked.color){
+            if(canGiveCheckOnEmptySquare || canGiveCheckByCapturing){
                 CheckSquare checkSquare = new CheckSquare(location[0], location[1]);
 
                 if(movement.equals("straight")){
@@ -612,11 +653,9 @@ public class Game {
                 }
 
                 checkSquares.put(GameUtils.coordsToString(location), checkSquare);
-
-                // capture of defender with check stops straight and diagonal movement
-                if(!movement.equals("knight") && pieceAtLocation != null){
-                    break;
-                }
+            }
+            if(!canGiveCheckOnEmptySquare && !movement.equals("knight")){
+                break;
             }
         }
     }

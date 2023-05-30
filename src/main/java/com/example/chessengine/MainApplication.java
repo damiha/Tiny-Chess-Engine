@@ -69,6 +69,8 @@ public class MainApplication extends Application {
 
     boolean statisticsHaveChanged = true;
 
+    boolean screenIsEmpty = false;
+
     boolean autoQueenActivated;
 
     boolean transpositionTablesEnabled;
@@ -92,6 +94,13 @@ public class MainApplication extends Application {
     int lifeSignsObserved = 0;
 
     Outcome outcome = Outcome.Open;
+
+    int timesPositionReached = 0;
+
+    long millisSinceGameOver;
+    long millisToWaitAfterGameOver = 2000;
+    boolean isClockRunningAfterGameOver = false;
+    int numberOfMovesWithoutProgress = 0;
 
     @Override
     public void start(Stage stage) {
@@ -124,7 +133,14 @@ public class MainApplication extends Application {
         new AnimationTimer() {
             public void handle(long currentNanoTime) {
 
-                if(!isInGame()){
+                // start clock after checkmate, stalemate to display delayed
+                if(outcome != Outcome.Open && !isClockRunningAfterGameOver){
+                        millisSinceGameOver = System.currentTimeMillis();
+                        isClockRunningAfterGameOver = true;
+                }
+
+                if(managementRequired() || timeAfterGameOverUp()){
+                    // wait until you display final result so checkmate,stalemate can be seen
                     clearEntireScreen(gc);
                     managementGUI.draw();
                 }
@@ -167,6 +183,7 @@ public class MainApplication extends Application {
                         gameGUI.clearPanel();
                         gameGUI.drawPanel(getPanelInformation());
                         statisticsHaveChanged = false;
+                        screenIsEmpty = false;
                     }
                     screenDrawnSinceMove = true;
                 }
@@ -273,10 +290,8 @@ public class MainApplication extends Application {
         tableEntries = minimax.tableEntries;
 
         totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
-
-        long runtimeInMillis = System.currentTimeMillis() - minimax.start;
-        runtimeInSeconds = runtimeInMillis / 1000.0;
-        positionsEvaluatedPerSecond = (int) (totalNumberPositionsEvaluated / runtimeInSeconds);
+        runtimeInSeconds = minimax.runtimeInSeconds;
+        positionsEvaluatedPerSecond = minimax.positionsEvaluatedPerSecond;
 
         cutoffReached = minimax.cutoffReached;
         bestValue = minimax.bestValue;
@@ -285,19 +300,28 @@ public class MainApplication extends Application {
         return null;
     };
 
+    private boolean timeAfterGameOverUp(){
+        return isClockRunningAfterGameOver && System.currentTimeMillis() - millisSinceGameOver > millisToWaitAfterGameOver;
+    }
+
+    private boolean managementRequired(){
+        return !modeChosen || !sideChosen || suspendedByPromotion;
+    }
+
     private void drawGame(){
 
         if(gameGUI.perspective == null){
             gameGUI.setPerspective(isPerspectiveFlipped() ? PieceColor.Black : PieceColor.White);
         }
         // only draw when humans turn, minimax needs full power
-        if(!humanVsComputer || minimax == null) {
+        if(screenIsEmpty || (!humanVsComputer || minimax == null)) {
             gameGUI.drawCheckerBoard();
             gameGUI.drawPosition(positionToDisplay);
 
             if (minimax == null && isPieceSelected) {
                 gameGUI.drawMovesOfSelectedPiece(game.getMovesOfSelectedPiece(selectedPiece));
             }
+            screenIsEmpty = false;
         }
     }
 
@@ -313,6 +337,9 @@ public class MainApplication extends Application {
         blackCastleRightString =
                 (game.blackKing.canShortCastle ? "short" : "") + ", " +
                         (game.blackKing.canLongCastle ? "long" : "");
+
+        timesPositionReached = game.getRepetitionsOfCurrentPosition();
+        numberOfMovesWithoutProgress = game.numberOfMovesWithoutProgress;
     }
 
     boolean isInGame(){
@@ -322,6 +349,7 @@ public class MainApplication extends Application {
     private void clearEntireScreen(GraphicsContext gc){
         gc.setFill(Color.WHITE);
         gc.fillRect(0, 0, windowWidth, windowHeight);
+        screenIsEmpty = true;
     }
 
     boolean isHumansTurn(){
@@ -376,6 +404,7 @@ public class MainApplication extends Application {
     void executeHumanMove(Move move){
         game.executeMove(move);
         game.setPossibleMoves(FilterMode.AllMoves);
+
         updatePositionToDisplay();
 
         screenDrawnSinceMove = false;
@@ -385,6 +414,8 @@ public class MainApplication extends Application {
 
         evaluationMethod.staticEvaluation(game);
         evaluationSummary = evaluationMethod.getSummary();
+
+        statisticsHaveChanged = true;
     }
 
     boolean isPerspectiveFlipped(){
@@ -408,6 +439,8 @@ public class MainApplication extends Application {
 
         return new String[]{
                 "Turn: " + whoseTurnString,
+                "#Times position reached: " + timesPositionReached,
+                "#Moves without progress: " + numberOfMovesWithoutProgress,
                 "Castling white: " + whiteCastleRightString,
                 "Castling black: " + blackCastleRightString,
                 "En passant: " + game.enPassantEnabled,
@@ -416,7 +449,7 @@ public class MainApplication extends Application {
                 "Quiescence depth: " + quiescenceDepth,
                 "Alpha-Beta: " + alphaBeta,
                 "Move sorting: " + moveSorting,
-                "Transposition tables: " + transpositionTablesEnabled,
+                transpositionTablesEnabled ? "Transposition tables: true" : null,
                 "Quiescence search: " + quiescenceSearchEnabled,
                 "Filter mode: " + (minimaxFilterMode == null ? "?" : minimaxFilterMode),
                 "Auto-queen: " + autoQueenActivated,
@@ -426,8 +459,8 @@ public class MainApplication extends Application {
                 "Positions evaluated: " + totalNumberPositionsEvaluated,
                 "Positions evaluated (per sec): " + positionsEvaluatedPerSecond,
                 "Cut-off reached: " + cutoffReached,
-                "Cache hits: " + cacheHits,
-                "Table entries: " + tableEntries,
+                transpositionTablesEnabled ? "Cache hits: " + cacheHits : null,
+                transpositionTablesEnabled ? "Table entries: " + tableEntries : null,
                 "Best value: " + bestValue,
                 "Progress: " + Math.round((minimax != null ? minimax.percentageDone : 0.0) * 100.0f) + "%",
                 minimax != null ? ("Calculating" + ".".repeat(lifeSignsObserved % 4)) : "",

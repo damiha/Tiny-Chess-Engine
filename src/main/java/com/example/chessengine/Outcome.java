@@ -5,5 +5,6 @@ public enum Outcome {
     BlackWon,
     Stalemate,
     DrawByRepetition,
+    DrawBy50MoveRule,
     Open
 }

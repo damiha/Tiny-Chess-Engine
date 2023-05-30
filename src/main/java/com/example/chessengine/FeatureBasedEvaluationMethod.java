@@ -61,7 +61,9 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         else if(game.getOutcome() == Outcome.BlackWon){
             return Integer.MIN_VALUE;
         }
-        else if(game.getOutcome() == Outcome.Stalemate || game.getOutcome() == Outcome.DrawByRepetition){
+        else if(game.getOutcome() == Outcome.Stalemate
+                || game.getOutcome() == Outcome.DrawByRepetition
+                || game.getOutcome() == Outcome.DrawBy50MoveRule){
             return 0;
         }
         else{
