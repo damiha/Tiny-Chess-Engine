@@ -10,13 +10,4 @@ public class CheckSquare {
         this.x = x;
         this.y = y;
     }
-
-    public int hashCode(){
-        return (this.x + "," + this.y).hashCode();
-    }
-
-    public boolean equals(Object other){
-        // TODO: finish this
-        return false;
-    }
 }

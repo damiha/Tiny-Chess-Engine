@@ -56,10 +56,10 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         resetStats();
 
         if(game.getOutcome() == Outcome.WhiteWon){
-            return Integer.MAX_VALUE;
+            return Double.POSITIVE_INFINITY;
         }
         else if(game.getOutcome() == Outcome.BlackWon){
-            return Integer.MIN_VALUE;
+            return Double.NEGATIVE_INFINITY;
         }
         else if(game.getOutcome() == Outcome.Stalemate
                 || game.getOutcome() == Outcome.DrawByRepetition

@@ -22,10 +22,6 @@ public class Game {
 
     boolean debugOn = false;
     boolean enPassantEnabled = true;
-    ArrayList<Move> possibleMovesInCurrentPosition;
-
-    // for quiescence search
-    ArrayList<Move> possibleChecksAndCaptures;
 
     HashMap<String, Integer> repetitionsPerPosition;
 
@@ -36,6 +32,8 @@ public class Game {
     // for 50 move rule
     Stack<Integer> storedNumberOfMovesWithoutProgress;
     int numberOfMovesWithoutProgress;
+
+    boolean isWhiteKingInCheck, isBlackKingInCheck;
 
     public Game(){
         position = getStartingPosition();
@@ -49,15 +47,13 @@ public class Game {
         executedMoves = new Stack<>();
         storedCastleRights = new Stack<>();
 
-        possibleMovesInCurrentPosition = new ArrayList<>();
-        possibleChecksAndCaptures = new ArrayList<>();
-
         repetitionsPerPosition = new HashMap<>();
         outcome = Outcome.Open;
         storedNumberOfMovesWithoutProgress = new Stack<>();
         numberOfMovesWithoutProgress = 0;
 
-        setPossibleMoves(FilterMode.AllMoves);
+        isWhiteKingInCheck = false;
+        isBlackKingInCheck = false;
     }
 
     Piece[] getPieceRow(PieceColor color){
@@ -110,11 +106,21 @@ public class Game {
 
             // delete for 3-fold repetition rule
             String boardString = GameUtils.boardToString(this);
-            repetitionsOfReachedPosition = repetitionsPerPosition.get(boardString) - 1;
+            repetitionsOfReachedPosition = repetitionsPerPosition.getOrDefault(boardString, 1) - 1;
             repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition);
 
             Move move = executedMoves.pop();
             numberOfMovesWithoutProgress = storedNumberOfMovesWithoutProgress.pop();
+
+            // move is made by other side, if current turn is white, move was made by black and gave check
+            if(move.isCheck()){
+                if(whoseTurn == PieceColor.White){
+                    isWhiteKingInCheck = false;
+                }
+                else{
+                    isBlackKingInCheck = false;
+                }
+            }
 
             if(move.isCastle()){
                 undoCastling(move);
@@ -241,7 +247,16 @@ public class Game {
             kingWhoCastled.hasCastledLong = true;
         }
     }
-    void executeMove(Move move){
+
+    public void executeMove(Move move){
+        executeMove(move, true);
+    }
+
+    public void executePossiblyIllegalMove(Move move){
+        executeMove(move, false);
+    }
+
+    private void executeMove(Move move, boolean guaranteedToBeLegal){
 
         assert insideBoard(move.endingPosition) : "ERROR: illegal move!";
         assert !isOver() : "ERROR: game is over!";
@@ -249,6 +264,15 @@ public class Game {
 
         storedCastleRights.push(new CastleRights(whiteKing, blackKing));
         storedNumberOfMovesWithoutProgress.push(numberOfMovesWithoutProgress);
+
+        if(move.isCheck()){
+            if(whoseTurn == PieceColor.White){
+                isBlackKingInCheck = true;
+            }
+            else{
+                isWhiteKingInCheck = true;
+            }
+        }
 
         // for 50 move rule
         if(move.isCapture() || move.piece instanceof Pawn){
@@ -258,7 +282,7 @@ public class Game {
             numberOfMovesWithoutProgress++;
         }
 
-        // move rook as well (we assume its at the right position
+        // move rook as well (we assume it's at the right position
         if(move.isCastle()){
             castle(move);
         }
@@ -295,7 +319,20 @@ public class Game {
 
         executedMoves.push(move);
 
+        // since move was legal, own king not in check
+        if(guaranteedToBeLegal) {
+            setOwnKingNotInCheck();
+        }
+
         changeTurns();
+    }
+
+    void setOwnKingNotInCheck() {
+        if (whoseTurn == PieceColor.White) {
+            isWhiteKingInCheck = false;
+        } else {
+            isBlackKingInCheck = false;
+        }
     }
 
     int getRepetitionsOfCurrentPosition(){
@@ -336,16 +373,10 @@ public class Game {
     boolean canCaptureSomethingAt(int[] coords, PieceColor moverColor){
         return canLandOn(coords, moverColor) && getPieceAt(coords) != null;
     }
-    List<Move> getPossibleMoves(){
-        return possibleMovesInCurrentPosition;
-    }
-
-    // for quiescence search
-    List<Move> getPossibleChecksAndCaptures(){return possibleChecksAndCaptures; }
 
     public List<Move> getMovesOfSelectedPiece(Piece selectedPiece){
         ArrayList<Move> movesOfSelectedPiece = new ArrayList<>();
-        for(Move move : getPossibleMoves()){
+        for(Move move : getLegalMoves()){
             if(move.piece == selectedPiece){
                 movesOfSelectedPiece.add(move);
             }
@@ -353,116 +384,104 @@ public class Game {
         return movesOfSelectedPiece;
     }
     // get all moves the current player (whose turn) can currently make
-    void setPossibleMoves(FilterMode filterMode){
-        setPossibleMoves(filterMode, false);
+    List<Move> getLegalMoves(){
+        return getLegalMoves(false);
     }
-    void setPossibleMoves(FilterMode filterMode, boolean onlyChecksAndCaptures){
 
-        // does nothing if game is over
-        if(isOver()){
-            return;
-        }
+    List<Move> getLegalCaptures(){
+        return getLegalMoves(true);
+    }
 
-        List<Move> movesToUpdate = onlyChecksAndCaptures ? possibleChecksAndCaptures : possibleMovesInCurrentPosition;
+    // tactical moves are captures, checks and check evasions
+    private List<Move> getLegalMoves(boolean onlyCaptures){
 
-        movesToUpdate.clear();
+        assert !isOver() : "too far";
 
-        // filter out illegal moves
-        if(filterMode == FilterMode.AllMoves){
+        List<Move> legalMoves = new ArrayList<>();
 
-            King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
-            King kingToBeAttacked = whoseTurn == PieceColor.White ? blackKing : whiteKing;
+        King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
+        King kingToBeAttacked = whoseTurn == PieceColor.White ? blackKing : whiteKing;
 
-            Set<Piece> defenders = getDefenders(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
-            HashMap<String, CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
+        Set<Piece> defenders = getDefenders(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
+        HashMap<String, CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
 
-            PieceColor oppositeColor = whoseTurn.getOppositeColor();
-            boolean kingInCheck = isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y);
+        PieceColor oppositeColor = whoseTurn.getOppositeColor();
+        boolean kingInCheck = inCheck();
 
-            // if king is not in check, we can only walk into check or move a pinned piece
-            // if king is in check, we either walk away from it or capture or block (that's too complicated, check everything there)
+        // if king is not in check, we can only walk into check or move a pinned piece
+        // if king is in check, we either walk away from it or capture or block (that's too complicated, check everything there)
 
-            for (int y = 0; y < 8; y++) {
-                for (int x = 0; x < 8; x++) {
-                    if (position[y][x] != null && position[y][x].color == whoseTurn) {
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                if (position[y][x] != null && position[y][x].color == whoseTurn) {
 
-                        Piece pieceToBeMoved = position[y][x];
-                        List<Move> possiblePieceMoves = pieceToBeMoved.getPossibleMoves();
+                    Piece pieceToBeMoved = position[y][x];
+                    List<Move> possiblePieceMoves = pieceToBeMoved.getPossibleMoves();
 
-                        for(Move mv : possiblePieceMoves){
-                            if(mv.startingPosition[0] == mv.endingPosition[0] && mv.startingPosition[1] == mv.endingPosition[1]){
-                                System.out.println(pieceToBeMoved);
+                    if(onlyCaptures){
+                        possiblePieceMoves = possiblePieceMoves.stream().filter(Move::isCapture).toList();
+                    }
+
+                    // if destination is a square were check can be given and the piece has the right type, mark as check
+                    for(Move move : possiblePieceMoves){
+                        if(checkSquares.containsKey(GameUtils.coordsToString(move.endingPosition))){
+                            CheckSquare square = checkSquares.get(GameUtils.coordsToString(move.endingPosition));
+                            if((square.checkByPawn && pieceToBeMoved instanceof Pawn)
+                                    || (square.checkByBishop && (pieceToBeMoved instanceof Bishop || pieceToBeMoved instanceof Queen))
+                                    || (square.checkByKnight && pieceToBeMoved instanceof Knight)
+                                    || (square.checkByRook && (pieceToBeMoved instanceof Rook || pieceToBeMoved instanceof Queen))){
+                                move.markAsCheck();
                             }
                         }
+                    }
 
-                        // if destination is a square were check can be given and the piece has the right type, mark as check
-                        for(Move move : possiblePieceMoves){
-                            if(checkSquares.containsKey(GameUtils.coordsToString(move.endingPosition))){
-                                CheckSquare square = checkSquares.get(GameUtils.coordsToString(move.endingPosition));
-                                if((square.checkByPawn && pieceToBeMoved instanceof Pawn)
-                                        || (square.checkByBishop && (pieceToBeMoved instanceof Bishop || pieceToBeMoved instanceof Queen))
-                                        || (square.checkByKnight && pieceToBeMoved instanceof Knight)
-                                        || (square.checkByRook && (pieceToBeMoved instanceof Rook || pieceToBeMoved instanceof Queen))){
-                                    move.markAsCheck();
+                    boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !defenders.contains(pieceToBeMoved));
+
+                    if(checkNotNecessary){
+                        if(!onlyCaptures) {
+                            pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
+                        }
+                        legalMoves.addAll(possiblePieceMoves);
+                    }
+                    else {
+                        // reset and increment for every legal move
+                        pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
+                        for (Move candidateMove : possiblePieceMoves) {
+
+                            // can't castle out of check, through check, immediately discard those
+                            if (candidateMove.isCastle()) {
+                                if (kingInCheck ||
+                                        (candidateMove.isShortCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x + 1, kingToBeProtected.y))
+                                        || (candidateMove.isLongCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x - 1, kingToBeProtected.y))) {
+                                    continue;
                                 }
                             }
-                        }
-
-
-                        if(onlyChecksAndCaptures){
-                            possiblePieceMoves = possiblePieceMoves.stream().filter(m -> m.isCapture() || m.isCheck()).toList();
-                        }
-
-                        boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !defenders.contains(pieceToBeMoved));
-
-                        if(checkNotNecessary){
-                            if(!onlyChecksAndCaptures) {
-                                pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
-                            }
-                            movesToUpdate.addAll(possiblePieceMoves);
-                        }
-                        else {
-                            // reset and increment for every legal move
-                            pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
-                            for (Move candidateMove : possiblePieceMoves) {
-
-                                // can't castle out of check, through check, immediately discard those
-                                if (candidateMove.isCastle()) {
-                                    if (kingInCheck ||
-                                            (candidateMove.isShortCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x + 1, kingToBeProtected.y))
-                                            || (candidateMove.isLongCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x - 1, kingToBeProtected.y))) {
-                                        continue;
-                                    }
+                            // we can only run into checkmate if a defender that's pinned moves or king moves
+                            // we only generate moves for one side
+                            executePossiblyIllegalMove(candidateMove);
+                            if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
+                                legalMoves.add(candidateMove);
+                                if(!onlyCaptures) {
+                                    pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
                                 }
-                                // we can only run into checkmate if a defender that's pinned moves or king moves
-                                // we only generate moves for one side
-                                executeMove(candidateMove);
-                                if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
-                                    movesToUpdate.add(candidateMove);
-                                    if(!onlyChecksAndCaptures) {
-                                        pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
-                                    }
-                                }
-                                undoLastMove();
                             }
+                            undoLastMove();
                         }
                     }
                 }
             }
-            // either checkmate or stalemate
-            if(possibleMovesInCurrentPosition.isEmpty()){
-                // checkmate
-                if(kingInCheck){
-                    outcome = (whoseTurn.getOppositeColor() == PieceColor.Black ? Outcome.BlackWon : Outcome.WhiteWon);
-                }
-                else{
-                    outcome = Outcome.Stalemate;
-                }
+        }
+        // either checkmate or stalemate
+        if(!onlyCaptures && legalMoves.isEmpty()){
+            // checkmate
+            if(kingInCheck){
+                outcome = (whoseTurn.getOppositeColor() == PieceColor.Black ? Outcome.BlackWon : Outcome.WhiteWon);
+            }
+            else{
+                outcome = Outcome.Stalemate;
             }
         }
-        else{
-            throw new RuntimeException("only checking castling moves is not allowed anymore");
-        }
+        return legalMoves;
     }
 
     public Outcome getOutcome(){
@@ -470,21 +489,21 @@ public class Game {
     }
 
     public String toString(){
-        String res = "";
+        StringBuilder res = new StringBuilder();
         for(int y = 0; y < 8; y++){
             for(int x = 0; x < 8; x++){
                 if(position[y][x] != null){
-                    res += position[y][x].toString();
+                    res.append(position[y][x].toString());
                 }
                 else{
-                    res += "..";
+                    res.append("..");
                 }
-                res += " ";
+                res.append(" ");
             }
-            res += "\n";
+            res.append("\n");
         }
-        res += whoseTurn.name();
-        return res;
+        res.append(whoseTurn.name());
+        return res.toString();
     }
 
     void changeTurns(){
@@ -494,6 +513,11 @@ public class Game {
     boolean isOver(){
         // kings can be captured as of now
         return outcome != Outcome.Open;
+    }
+
+    boolean inCheck(){
+        return (whoseTurn == PieceColor.White && isWhiteKingInCheck) ||
+                (whoseTurn == PieceColor.Black && isBlackKingInCheck);
     }
 
     boolean isSquareAttackedBy(PieceColor color, int x, int y){
@@ -660,20 +684,6 @@ public class Game {
         }
     }
 
-    ArrayList<Move> getDeepCopyOfMoves(){
-        ArrayList<Move> deepCopyOfMoves = new ArrayList<>();
-        for(Move move : getPossibleMoves()){
-            deepCopyOfMoves.add(move.getDeepCopy());
-        }
-        return deepCopyOfMoves;
-    }
-    ArrayList<Move> getDeepCopyOfChecksAndCaptures(){
-        ArrayList<Move> deepCopyOfChecksAndCaptures = new ArrayList<>();
-        for(Move move : getPossibleChecksAndCaptures()){
-            deepCopyOfChecksAndCaptures.add(move.getDeepCopy());
-        }
-        return deepCopyOfChecksAndCaptures;
-    }
     // TODO: extend this
     public void loadFromPGN(File file){
         try {
@@ -705,7 +715,7 @@ public class Game {
                 }
                 List<Move> movesMatchingWithString = new ArrayList<>();
                 // play all moves
-                for(Move move : getPossibleMoves()){
+                for(Move move : getLegalMoves()){
                     if(move.matchesWith(line)){
                         movesMatchingWithString.add(move);
                     }
@@ -720,7 +730,7 @@ public class Game {
 
                         for(Move matchingMove : movesMatchingWithString){
                             if(matchingMove.departureFromFile(departureFile)){
-                                executeMoveAndSet(matchingMove);
+                                executeMove(matchingMove);
                                 break;
                             }
                         }
@@ -732,7 +742,7 @@ public class Game {
 
                         for(Move matchingMove : movesMatchingWithString){
                             if(matchingMove.departureFromRank(departureRank)){
-                                executeMoveAndSet(matchingMove);
+                                executeMove(matchingMove);
                                 break;
                             }
                         }
@@ -741,7 +751,7 @@ public class Game {
                     // TODO: do this another time
                 }
                 else if(movesMatchingWithString.size() == 1){
-                    executeMoveAndSet(movesMatchingWithString.get(0));
+                    executeMove(movesMatchingWithString.get(0));
                 }
                 else{
                     System.out.println(line);
@@ -751,11 +761,6 @@ public class Game {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private void executeMoveAndSet(Move move){
-        executeMove(move);
-        setPossibleMoves(FilterMode.AllMoves);
     }
 
     public boolean allDifferentFiles(List<Move> moves){

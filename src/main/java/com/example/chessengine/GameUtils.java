@@ -7,19 +7,23 @@ public class GameUtils {
     }
 
     public static String boardToString(Game game){
-        String res = "";
+        StringBuilder res = new StringBuilder();
         for(int y = 0; y < 8; y++){
             for(int x = 0; x < 8; x++){
                 if(game.position[y][x] != null){
-                    res += game.position[y][x].toString();
+                    res.append(game.position[y][x].toString());
                 }
                 else{
-                    res += "..";
+                    res.append("..");
                 }
-                res += " ";
+                res.append(" ");
             }
-            res += "\n";
+            res.append("\n");
         }
-        return res;
+        return res.toString();
+    }
+
+    static boolean onTheSpot(Move move){
+        return move.startingPosition[0] == move.endingPosition[0] && move.startingPosition[1] == move.endingPosition[1];
     }
 }

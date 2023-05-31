@@ -98,6 +98,7 @@ public class Move {
 
     public Move getDeepCopy(){
         Move deepCopy = new Move(piece, endingPosition);
+        deepCopy.startingPosition = startingPosition;
 
         deepCopy.isFirstMove = isFirstMove;
         deepCopy.isTwoStepPawnMove = isTwoStepPawnMove;

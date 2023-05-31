@@ -36,19 +36,15 @@ public class MainApplication extends Application {
     int totalNumberPositionsEvaluated = 0;
     int positionsEvaluatedPerSecond = 0;
     double runtimeInSeconds = 0.0;
-    int searchDepth = 0;
+    int searchDepthReached = 0;
     boolean alphaBeta = false;
     boolean moveSorting  = false;
     int cutoffReached = 0;
     double bestValue = 0.0;
 
-    FilterMode minimaxFilterMode;
-
     Minimax minimax = null;
 
     boolean engineResigned = false;
-
-    int numberOfTopLevelBranches = 0;
 
     boolean sideChosen = false;
 
@@ -73,23 +69,19 @@ public class MainApplication extends Application {
 
     boolean autoQueenActivated;
 
-    boolean transpositionTablesEnabled;
-
     boolean quiescenceSearchEnabled;
 
-    int quiescenceDepth;
+    int quiescenceDepthReached;
 
-    int cacheHits;
-
-    int tableEntries;
-
-    // when human promotes, we have to ask to which piece?
+    // when human promotes, we have to ask which piece?
     boolean suspendedByPromotion = false;
     Move pendingMove = null;
 
     // for analysis
     EvaluationMethod evaluationMethod;
     String evaluationSummary = "";
+
+    boolean isWhiteInCheck, isBlackInCheck;
 
     int lifeSignsObserved = 0;
 
@@ -101,6 +93,8 @@ public class MainApplication extends Application {
     long millisToWaitAfterGameOver = 2000;
     boolean isClockRunningAfterGameOver = false;
     int numberOfMovesWithoutProgress = 0;
+
+    int maxSecondsToRespond;
 
     @Override
     public void start(Stage stage) {
@@ -148,14 +142,13 @@ public class MainApplication extends Application {
                 else {
                     if(humanVsComputer) {
                         if (!isHumansTurn() && screenDrawnSinceMove && minimax == null) {
-                            minimax = new Minimax(game, updateStatistics, sendLifeSign, featureBasedEvaluationMethod);
+                            minimax = new Minimax(game, updateStatistics, featureBasedEvaluationMethod);
                             minimax.start();
                         }
                         // done
                         if (!isHumansTurn() && minimax != null && minimax.isFinished) {
-                            if (minimax.bestMove != null) {
-                                game.executeMove(minimax.bestMove);
-                                game.setPossibleMoves(FilterMode.AllMoves);
+                            if (minimax.bestMoveAcrossDepths != null) {
+                                executeAndCheckGameOver(minimax.bestMoveAcrossDepths);
                                 updatePositionToDisplay();
                             } else {
                                 engineResigned = false;
@@ -259,7 +252,6 @@ public class MainApplication extends Application {
                  }
                  if(event.getCode() == KeyCode.U){
                      game.undoLastMove();
-                     game.setPossibleMoves(FilterMode.AllMoves);
                      updatePositionToDisplay();
                  }
                  if(event.getCode() == KeyCode.E){
@@ -276,25 +268,20 @@ public class MainApplication extends Application {
     // called by minimax whenever progress
     Function<Minimax, Void> updateStatistics = minimax -> {
         // update statistic
-        searchDepth = minimax.searchDepth;
-        numberOfTopLevelBranches = minimax.numberOfTopLevelBranches;
+        maxSecondsToRespond = minimax.maxSecondsToRespond;
+        searchDepthReached = minimax.searchDepthReached;
         alphaBeta = minimax.alphaBetaPruningEnabled;
         moveSorting = minimax.moveSortingEnabled;
-        minimaxFilterMode = minimax.filterMode;
         autoQueenActivated = minimax.autoQueenActivated;
-        transpositionTablesEnabled = minimax.transpositionTablesEnabled;
         quiescenceSearchEnabled = minimax.quiescenceSearchEnabled;
-        quiescenceDepth = minimax.quiescenceDepth;
-
-        cacheHits = minimax.cacheHits;
-        tableEntries = minimax.tableEntries;
+        quiescenceDepthReached = minimax.quiescenceDepthReached;
 
         totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
         runtimeInSeconds = minimax.runtimeInSeconds;
         positionsEvaluatedPerSecond = minimax.positionsEvaluatedPerSecond;
 
         cutoffReached = minimax.cutoffReached;
-        bestValue = minimax.bestValue;
+        bestValue = minimax.bestValueAcrossDepths;
 
         statisticsHaveChanged = true;
         return null;
@@ -340,6 +327,8 @@ public class MainApplication extends Application {
 
         timesPositionReached = game.getRepetitionsOfCurrentPosition();
         numberOfMovesWithoutProgress = game.numberOfMovesWithoutProgress;
+        isWhiteInCheck = game.isWhiteKingInCheck;
+        isBlackInCheck = game.isBlackKingInCheck;
     }
 
     boolean isInGame(){
@@ -402,13 +391,11 @@ public class MainApplication extends Application {
     }
 
     void executeHumanMove(Move move){
-        game.executeMove(move);
-        game.setPossibleMoves(FilterMode.AllMoves);
 
+        executeAndCheckGameOver(move);
         updatePositionToDisplay();
 
         screenDrawnSinceMove = false;
-
         isPieceSelected = false;
         selectedPiece = null;
 
@@ -418,15 +405,14 @@ public class MainApplication extends Application {
         statisticsHaveChanged = true;
     }
 
+    void executeAndCheckGameOver(Move move){
+        game.executeMove(move);
+        game.getLegalMoves();
+    }
+
     boolean isPerspectiveFlipped(){
         return (humanVsComputer && humanPlays == PieceColor.White) || (!humanVsComputer && humanPlays == PieceColor.Black);
     }
-
-    Function<Void, Void> sendLifeSign = (Void) -> {
-        lifeSignsObserved += 1;
-        statisticsHaveChanged = true;
-        return null;
-    };
 
     private String[] getPanelInformation(){
 
@@ -439,31 +425,27 @@ public class MainApplication extends Application {
 
         return new String[]{
                 "Turn: " + whoseTurnString,
+                String.format("In check: %b (w), %b (b)", isWhiteInCheck, isBlackInCheck),
                 "#Times position reached: " + timesPositionReached,
                 "#Moves without progress: " + numberOfMovesWithoutProgress,
                 "Castling white: " + whiteCastleRightString,
                 "Castling black: " + blackCastleRightString,
                 "En passant: " + game.enPassantEnabled,
                 "",
-                "Search depth: " + searchDepth,
-                "Quiescence depth: " + quiescenceDepth,
+                "Time to respond: " + maxSecondsToRespond,
+                "Search depth completed: " + searchDepthReached,
+                "Quiescence depth completed: " + quiescenceDepthReached,
                 "Alpha-Beta: " + alphaBeta,
                 "Move sorting: " + moveSorting,
-                transpositionTablesEnabled ? "Transposition tables: true" : null,
                 "Quiescence search: " + quiescenceSearchEnabled,
-                "Filter mode: " + (minimaxFilterMode == null ? "?" : minimaxFilterMode),
                 "Auto-queen: " + autoQueenActivated,
                 "",
-                "Branching factor: " + numberOfTopLevelBranches,
                 "Runtime (in sec): " + runtimeInSeconds,
                 "Positions evaluated: " + totalNumberPositionsEvaluated,
                 "Positions evaluated (per sec): " + positionsEvaluatedPerSecond,
                 "Cut-off reached: " + cutoffReached,
-                transpositionTablesEnabled ? "Cache hits: " + cacheHits : null,
-                transpositionTablesEnabled ? "Table entries: " + tableEntries : null,
-                "Best value: " + bestValue,
-                "Progress: " + Math.round((minimax != null ? minimax.percentageDone : 0.0) * 100.0f) + "%",
-                minimax != null ? ("Calculating" + ".".repeat(lifeSignsObserved % 4)) : "",
+                "",
+                String.format("Best value: %.4f", bestValue),
                 "",
                 "[SPACE] to switch sides",
                 "[U] to undo move",
