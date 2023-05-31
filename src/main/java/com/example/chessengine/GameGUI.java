@@ -5,6 +5,7 @@ import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 
 import java.util.List;
+import java.util.Set;
 
 public class GameGUI {
 
@@ -42,6 +43,9 @@ public class GameGUI {
     // who is at the bottom of the screen?
     PieceColor perspective;
 
+    boolean highlightPinnedPieces;
+    boolean highlightAttackedSquares;
+
     public GameGUI(int windowWidth, int windowHeight, GraphicsContext gc){
         this.windowWidth = windowWidth;
         this.windowHeight = windowHeight;
@@ -53,6 +57,9 @@ public class GameGUI {
         panelY = offsetY;
 
         panelWidth = windowWidth - panelX - gapAroundPanel;
+
+        highlightPinnedPieces = false;
+        highlightAttackedSquares = false;
     }
 
     public void setPerspective(PieceColor perspective){
@@ -128,6 +135,26 @@ public class GameGUI {
                     }
                 }
             }
+        }
+    }
+
+    private int[] coordToPixel(int[] coord){
+            if(perspective == PieceColor.Black){
+                return new int[]{offsetX + (7-coord[0]) * tileLength, offsetY + (7-coord[1]) * tileLength};
+            }
+            else{
+                return new int[]{ offsetX + coord[0] * tileLength, offsetY + coord[1] * tileLength};
+            }
+    }
+
+    public void drawPinnedPieces(Set<Piece> pieces){
+
+        Color pinnedPieceHighlightColor = new Color(1, 1, 0, 0.5);
+
+        for(Piece piece : pieces){
+            gc.setFill(pinnedPieceHighlightColor);
+            int[] pos = coordToPixel(piece.position);
+            gc.fillRect(pos[0] , pos[1], tileLength, tileLength);
         }
     }
 

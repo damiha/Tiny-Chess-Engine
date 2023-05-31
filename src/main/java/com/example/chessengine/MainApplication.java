@@ -13,6 +13,7 @@ import javafx.stage.Stage;
 
 import java.io.File;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 
 public class MainApplication extends Application {
@@ -95,6 +96,8 @@ public class MainApplication extends Application {
     int numberOfMovesWithoutProgress = 0;
 
     int maxSecondsToRespond;
+
+    Set<Piece> pinnedPieces;
 
     @Override
     public void start(Stage stage) {
@@ -259,6 +262,12 @@ public class MainApplication extends Application {
                     humanPlays = game.whoseTurn.getOppositeColor();
                     isOneTimeEngineMove = true;
                  }
+                 if(event.getCode() == KeyCode.P){
+                     gameGUI.highlightPinnedPieces = !gameGUI.highlightPinnedPieces;
+                 }
+                 if(event.getCode() == KeyCode.A){
+                     gameGUI.highlightAttackedSquares = !gameGUI.highlightAttackedSquares;
+                 }
             }
         });
 
@@ -303,6 +312,13 @@ public class MainApplication extends Application {
         // only draw when humans turn, minimax needs full power
         if(screenIsEmpty || (!humanVsComputer || minimax == null)) {
             gameGUI.drawCheckerBoard();
+
+            if(gameGUI.highlightPinnedPieces){
+                gameGUI.drawPinnedPieces(pinnedPieces);
+            }
+            if(gameGUI.highlightAttackedSquares){
+
+            }
             gameGUI.drawPosition(positionToDisplay);
 
             if (minimax == null && isPieceSelected) {
@@ -329,6 +345,7 @@ public class MainApplication extends Application {
         numberOfMovesWithoutProgress = game.numberOfMovesWithoutProgress;
         isWhiteInCheck = game.isWhiteKingInCheck;
         isBlackInCheck = game.isBlackKingInCheck;
+        pinnedPieces = game.getPinnedPieces();
     }
 
     boolean isInGame(){
@@ -450,6 +467,8 @@ public class MainApplication extends Application {
                 "[SPACE] to switch sides",
                 "[U] to undo move",
                 "[E] to start engine",
+                "[P] to show pinned pieces",
+                "[A] to show attacked squares",
                 "",
                 evaluationSummary,
         };

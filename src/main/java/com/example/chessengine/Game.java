@@ -402,7 +402,7 @@ public class Game {
         King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
         King kingToBeAttacked = whoseTurn == PieceColor.White ? blackKing : whiteKing;
 
-        Set<Piece> defenders = getDefenders(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
+        Set<Piece> pinnedPieces = getPinnedPieces(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
         HashMap<String, CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
 
         PieceColor oppositeColor = whoseTurn.getOppositeColor();
@@ -435,7 +435,7 @@ public class Game {
                         }
                     }
 
-                    boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !defenders.contains(pieceToBeMoved));
+                    boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !pinnedPieces.contains(pieceToBeMoved));
 
                     if(checkNotNecessary){
                         if(!onlyCaptures) {
@@ -550,21 +550,64 @@ public class Game {
     }
 
     // you cannot have a defender that blocks a knight move
-    Set<Piece> getDefenders(PieceColor color, int x, int y){
+    Set<Piece> getPinnedPieces(PieceColor color, int x, int y){
 
-        Set<Piece> defenders = new HashSet<>();
-        // check all diagonals
-        List<BiFunction<int[], Integer, int[]>> locationGenerators = List.of(
-                getULDiagonal, getURDiagonal, getLLDiagonal,
-                getLRDiagonal, getLeft, getRight, getUp, getDown);
+        Set<Piece> pinnedPieces = new HashSet<>();
 
-        for(BiFunction<int[], Integer, int[]> getLocation : locationGenerators){
-            Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
-            if(firstPieceOnPath != null && firstPieceOnPath.color == color){
-                defenders.add(firstPieceOnPath);
+        List<BiFunction<int[], Integer, int[]>> diagonals =
+                List.of(getULDiagonal, getURDiagonal, getLLDiagonal, getLRDiagonal);
+        List<BiFunction<int[], Integer, int[]>> lines =
+                List.of(getUp, getRight, getDown, getLeft);
+
+        for(BiFunction<int[], Integer, int[]> getLocation : diagonals){
+            Piece pinnedPiece = getPinnedPieceOnPath(color, x, y, getLocation, "diagonal");
+            if(pinnedPiece != null){
+                pinnedPieces.add(pinnedPiece);
             }
         }
-        return defenders;
+        for(BiFunction<int[], Integer, int[]> getLocation : lines){
+            Piece pinnedPiece = getPinnedPieceOnPath(color, x, y, getLocation, "straight");
+            if(pinnedPiece != null){
+                pinnedPieces.add(pinnedPiece);
+            }
+        }
+        return pinnedPieces;
+    }
+
+    Set<Piece> getPinnedPieces(){
+        King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
+        return getPinnedPieces(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
+    }
+
+    public Piece getPinnedPieceOnPath(PieceColor defendingColor, int x, int y, BiFunction<int[], Integer, int[]> getLocation, String movement){
+
+        Piece firstPiece = null;
+        // no path on a chess board is longer than 8 squares
+        for(int i = 1;i < 8;i++){
+            int[] location = getLocation.apply(new int[]{x, y}, i);
+
+            if(!insideBoard(location)){
+                return null;
+            }
+            Piece pieceAtLocation = getPieceAt(location);
+
+            // we have a pinned piece and a piece that's blocked behind it
+            if(firstPiece != null && pieceAtLocation != null){
+                // is it an enemy piece of the right type?
+                if(pieceAtLocation.color == defendingColor.getOppositeColor()){
+                    return pieceAtLocation instanceof Queen || (movement.equals("straight") && pieceAtLocation instanceof Rook)
+                            || (movement.equals("diagonal") && pieceAtLocation instanceof Bishop) ? firstPiece : null;
+                }
+                else{
+                    return null;
+                }
+
+            }
+            else if(pieceAtLocation != null && pieceAtLocation.color == defendingColor){
+                firstPiece = pieceAtLocation;
+            }
+        }
+        return null;
     }
 
     HashMap<String, CheckSquare> getCheckSquares(King kingToBeAttacked){
