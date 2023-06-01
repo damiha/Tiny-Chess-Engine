@@ -246,15 +246,7 @@ public class MainApplication extends Application {
                     endSuspension();
                 }
             }
-            if(isInGame()){
-                 if(event.getCode().isWhitespaceKey()) {
-                     // stop minimax if running
-                     if (minimax != null) {
-                         minimax.stop();
-                         minimax = null;
-                     }
-                     game.changeTurns();
-                 }
+            if(isInGame() && minimax == null){
                  if(event.getCode() == KeyCode.U){
                      game.undoLastMove();
                      updatePositionToDisplay();
@@ -483,7 +475,6 @@ public class MainApplication extends Application {
                 "",
                 String.format("Best value: %.4f", bestValue),
                 "",
-                "[SPACE] to switch sides",
                 "[U] to undo move",
                 "[E] to start engine",
                 "[P] to show pinned pieces",

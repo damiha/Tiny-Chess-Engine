@@ -106,8 +106,12 @@ public class Game {
 
             // delete for 3-fold repetition rule
             String boardString = GameUtils.boardToString(this);
-            repetitionsOfReachedPosition = repetitionsPerPosition.getOrDefault(boardString, 1) - 1;
-            repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition);
+            repetitionsOfReachedPosition = repetitionsPerPosition.get(boardString) - 1;
+            if(repetitionsOfReachedPosition == 0){
+                repetitionsPerPosition.remove(boardString);
+            }else{
+                repetitionsPerPosition.put(boardString, repetitionsOfReachedPosition);
+            }
 
             Move move = executedMoves.pop();
             numberOfMovesWithoutProgress = storedNumberOfMovesWithoutProgress.pop();
@@ -477,6 +481,8 @@ public class Game {
                 outcome = Outcome.Stalemate;
             }
         }
+
+        squaresAttackedByOpponent = null;
         return legalMoves;
     }
 
