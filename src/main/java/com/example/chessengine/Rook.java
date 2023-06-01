@@ -1,7 +1,10 @@
 package com.example.chessengine;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.BiFunction;
 
 public class Rook extends Piece{
 
@@ -62,6 +65,15 @@ public class Rook extends Piece{
         }
 
         return moves;
+    }
+
+    @Override
+    public Set<Square> getAttackedSquares() {
+        Set<Square> attackSquares = new HashSet<>();
+        for(BiFunction<int[], Integer, int[]> lines : GameUtils.lines){
+            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, x, y, lines));
+        }
+        return attackSquares;
     }
 
     @Override

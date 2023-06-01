@@ -1,7 +1,9 @@
 package com.example.chessengine;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class King extends Piece{
 
@@ -59,6 +61,28 @@ public class King extends Piece{
             moves.add(longCastle);
         }
         return moves;
+    }
+
+    public Set<Square> getAttackedSquares(){
+        int[][] deltas = {
+                {-1, -1},
+                {-1, 0},
+                {-1, +1},
+                {+1, -1},
+                {+1, 0},
+                {+1, +1},
+                {0, -1},
+                {0, +1}
+        };
+        Set<Square> attackedSquares = new HashSet<>();
+
+        for(int[] delta : deltas){
+            int[] pos = new int[]{x + delta[0], y + delta[1]};
+            if(GameUtils.insideBoard(pos) && game.getPieceAt(pos) == null){
+                attackedSquares.add(new Square(pos));
+            }
+        }
+        return attackedSquares;
     }
 
     @Override

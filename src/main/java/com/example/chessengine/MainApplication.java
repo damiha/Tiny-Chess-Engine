@@ -64,6 +64,8 @@ public class MainApplication extends Application {
 
     boolean isOneTimeEngineMove = false;
 
+    boolean pvTablesEnabled = false;
+
     boolean statisticsHaveChanged = true;
 
     boolean screenIsEmpty = false;
@@ -81,11 +83,7 @@ public class MainApplication extends Application {
     // for analysis
     EvaluationMethod evaluationMethod;
     String evaluationSummary = "";
-
     boolean isWhiteInCheck, isBlackInCheck;
-
-    int lifeSignsObserved = 0;
-
     Outcome outcome = Outcome.Open;
 
     int timesPositionReached = 0;
@@ -98,6 +96,8 @@ public class MainApplication extends Application {
     int maxSecondsToRespond;
 
     Set<Piece> pinnedPieces;
+    Set<Square> attackedSquares;
+    Set<CheckSquare> checkSquares;
 
     @Override
     public void start(Stage stage) {
@@ -268,6 +268,9 @@ public class MainApplication extends Application {
                  if(event.getCode() == KeyCode.A){
                      gameGUI.highlightAttackedSquares = !gameGUI.highlightAttackedSquares;
                  }
+                if(event.getCode() == KeyCode.C){
+                    gameGUI.highlightCheckSquares = !gameGUI.highlightCheckSquares;
+                }
             }
         });
 
@@ -283,6 +286,7 @@ public class MainApplication extends Application {
         moveSorting = minimax.moveSortingEnabled;
         autoQueenActivated = minimax.autoQueenActivated;
         quiescenceSearchEnabled = minimax.quiescenceSearchEnabled;
+        pvTablesEnabled = minimax.pvTablesEnabled;
         quiescenceDepthReached = minimax.quiescenceDepthReached;
 
         totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
@@ -317,7 +321,10 @@ public class MainApplication extends Application {
                 gameGUI.drawPinnedPieces(pinnedPieces);
             }
             if(gameGUI.highlightAttackedSquares){
-
+                gameGUI.drawAttackedSquares(attackedSquares);
+            }
+            if(gameGUI.highlightCheckSquares){
+                gameGUI.drawCheckSquares(checkSquares);
             }
             gameGUI.drawPosition(positionToDisplay);
 
@@ -346,6 +353,8 @@ public class MainApplication extends Application {
         isWhiteInCheck = game.isWhiteKingInCheck;
         isBlackInCheck = game.isBlackKingInCheck;
         pinnedPieces = game.getPinnedPieces();
+        attackedSquares = game.getAttackedSquares(game.whoseTurn.getOppositeColor());
+        checkSquares = game.getCheckSquares(game.getKingToBeAttacked());
     }
 
     boolean isInGame(){
@@ -455,6 +464,7 @@ public class MainApplication extends Application {
                 "Alpha-Beta: " + alphaBeta,
                 "Move sorting: " + moveSorting,
                 "Quiescence search: " + quiescenceSearchEnabled,
+                "PvTables: " + pvTablesEnabled,
                 "Auto-queen: " + autoQueenActivated,
                 "",
                 "Runtime (in sec): " + runtimeInSeconds,
@@ -469,6 +479,7 @@ public class MainApplication extends Application {
                 "[E] to start engine",
                 "[P] to show pinned pieces",
                 "[A] to show attacked squares",
+                "[C] to show check squares",
                 "",
                 evaluationSummary,
         };

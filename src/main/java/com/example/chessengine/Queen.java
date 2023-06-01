@@ -1,7 +1,10 @@
 package com.example.chessengine;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.BiFunction;
 
 public class Queen extends Piece{
     public Queen(PieceColor color, int x, int y, Game game) {
@@ -33,6 +36,18 @@ public class Queen extends Piece{
         }
 
         return moves;
+    }
+
+    @Override
+    public Set<Square> getAttackedSquares() {
+        Set<Square> attackSquares = new HashSet<>();
+        for(BiFunction<int[], Integer, int[]> lines : GameUtils.lines){
+            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, x, y, lines));
+        }
+        for(BiFunction<int[], Integer, int[]> diagonal : GameUtils.diagonals){
+            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, x, y, diagonal));
+        }
+        return attackSquares;
     }
 
     @Override

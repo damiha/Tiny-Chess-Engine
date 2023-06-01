@@ -1,6 +1,7 @@
 package com.example.chessengine;
 
 import java.util.List;
+import java.util.Set;
 
 public abstract class Piece {
     PieceColor color;
@@ -22,6 +23,8 @@ public abstract class Piece {
     // copy constructor
     // find yourself on the board
     public abstract List<Move> getPossibleMoves();
+
+    public abstract Set<Square> getAttackedSquares();
 
     public void setRecentNumberOfPossibleMoves(int n){
         recentNumberOfPossibleMoves = n;

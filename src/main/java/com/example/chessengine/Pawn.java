@@ -1,7 +1,9 @@
 package com.example.chessengine;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class Pawn extends Piece{
 
@@ -87,6 +89,24 @@ public class Pawn extends Piece{
 
         return moves;
     }
+
+    @Override
+    public Set<Square> getAttackedSquares() {
+
+        int direction = color == PieceColor.White ? -1 : 1;
+        int[] leftCapture = new int[]{x - 1, y + direction};
+        int[] rightCapture = new int[]{x + 1, y + direction};
+
+        Set<Square> attackedSquares = new HashSet<>();
+        if(x >= 1 && game.getPieceAt(leftCapture) == null){
+            attackedSquares.add(new Square(leftCapture));
+        }
+        if(x <= 6 && game.getPieceAt(rightCapture) == null){
+            attackedSquares.add(new Square(rightCapture));
+        }
+        return attackedSquares;
+    }
+
 
     @Override
     public String toString() {

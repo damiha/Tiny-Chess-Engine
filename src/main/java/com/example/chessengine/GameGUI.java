@@ -46,6 +46,8 @@ public class GameGUI {
     boolean highlightPinnedPieces;
     boolean highlightAttackedSquares;
 
+    boolean highlightCheckSquares;
+
     public GameGUI(int windowWidth, int windowHeight, GraphicsContext gc){
         this.windowWidth = windowWidth;
         this.windowHeight = windowHeight;
@@ -60,6 +62,7 @@ public class GameGUI {
 
         highlightPinnedPieces = false;
         highlightAttackedSquares = false;
+        highlightCheckSquares = false;
     }
 
     public void setPerspective(PieceColor perspective){
@@ -157,6 +160,29 @@ public class GameGUI {
             gc.fillRect(pos[0] , pos[1], tileLength, tileLength);
         }
     }
+
+    public void drawAttackedSquares(Set<Square> attackedSquares){
+
+        Color attackedSquareHighlightColor = new Color(1, 0, 0, 0.5);
+
+        for(Square square : attackedSquares){
+            gc.setFill(attackedSquareHighlightColor);
+            int[] pos = coordToPixel(new int[]{square.x, square.y});
+            gc.fillRect(pos[0] , pos[1], tileLength, tileLength);
+        }
+    }
+
+    public void drawCheckSquares(Set<CheckSquare> attackedSquares){
+
+        Color checkSquareHighlightColor = new Color(0, 1, 1, 0.5);
+
+        for(Square square : attackedSquares){
+            gc.setFill(checkSquareHighlightColor);
+            int[] pos = coordToPixel(new int[]{square.x, square.y});
+            gc.fillRect(pos[0] , pos[1], tileLength, tileLength);
+        }
+    }
+
 
     // assume there's a piece selected
     public void drawMovesOfSelectedPiece(List<Move> moves) {

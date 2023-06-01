@@ -68,6 +68,11 @@ public class Move {
         this.promotedTo = promotedTo;
     }
 
+    // detect illegal moves that lead to uncertain states
+    public boolean isKingCapture(){
+        return isCapture && capturedPiece instanceof King;
+    }
+
     public boolean isCastle(){
         return isShortCastle || isLongCastle;
     }

@@ -1,5 +1,8 @@
 package com.example.chessengine;
 
+import javafx.util.Pair;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
@@ -9,7 +12,9 @@ public class Minimax implements Runnable{
     boolean alphaBetaPruningEnabled = true;
     boolean moveSortingEnabled = true;
     boolean autoQueenActivated = true;
-    boolean quiescenceSearchEnabled = false;
+    boolean quiescenceSearchEnabled = true;
+    // test principal variation first in an iterative deepening framework
+    boolean pvTablesEnabled = true;
     boolean isFinished;
 
     // in half moves (always uneven so enemy has the advantage)
@@ -37,10 +42,14 @@ public class Minimax implements Runnable{
     // used for iterative deepening search (search until time runs out)
     int maxSecondsToRespond = 15;
 
+    // don't use pvTables in quiescence for now
+    HashMap<String, Move> pvTable;
+
     public Minimax(Game game, Function<Minimax, Void> updateStatistics, EvaluationMethod evaluationMethod){
         this.game = game;
         this.updateStatistics = updateStatistics;
         this.evaluationMethod = evaluationMethod;
+        pvTable = new HashMap<>();
     }
 
     public Move getEngineMove(){
@@ -66,7 +75,7 @@ public class Minimax implements Runnable{
     public double alphaBeta(double alpha, double beta, int depth, int color){
 
         // this sets game over
-        List<Move> possibleMoves = game.getLegalMoves();
+        List<Move> legalMoves = game.getLegalMoves();
 
         if(game.isOver()){
             return color * evaluationMethod.staticEvaluation(game);
@@ -78,9 +87,11 @@ public class Minimax implements Runnable{
             return quiesce(alpha, beta, color, 0);
         }
 
-        sortMovesIfEnabled(possibleMoves);
+        if(moveSortingEnabled) {
+            legalMoves = getSortedWithPVTableIfEnabled(legalMoves);
+        }
 
-        for(Move move : possibleMoves){
+        for(Move move : legalMoves){
 
             updateStatisticsAtInterval();
 
@@ -100,9 +111,16 @@ public class Minimax implements Runnable{
             }
             if(score > alpha){
                 alpha = score;
+                insertIntoPVTableIfEnabled(move);
             }
         }
         return alpha;
+    }
+
+    void insertIntoPVTableIfEnabled(Move move){
+        if(pvTablesEnabled){
+            pvTable.put(game.toString(), move);
+        }
     }
     // when directly game over, we have call from above
     double quiesce(double alpha, double beta, int color, int depth){
@@ -122,22 +140,25 @@ public class Minimax implements Runnable{
         }
 
         // every other call can be sure that caller invoked setPossibleMoves()
-        List<Move> legalCaptures = game.getLegalCaptures();
-        sortMovesIfEnabled(legalCaptures);
+        List<Move> pseudoLegalCaptures = game.getPseudoLegalCaptures();
+        sortCapturesIfEnabled(pseudoLegalCaptures);
 
-        for(Move move : legalCaptures){
+        for(Move move : pseudoLegalCaptures){
 
             updateStatisticsAtInterval();
 
             if(isTimeUp()){
                 break;
             }
-
-            game.executeMove(move);
-
-            double score = -quiesce(-beta, -alpha, -color, depth - 1);
-
-            game.undoLastMove();
+            double score;
+            if(!move.isKingCapture()) {
+                game.executeMove(move);
+                score = -quiesce(-beta, -alpha, -color, depth - 1);
+                game.undoLastMove();
+            }
+            else{
+                score = Double.POSITIVE_INFINITY;
+            }
 
             if(score >= beta){
                 return beta;
@@ -149,7 +170,30 @@ public class Minimax implements Runnable{
         return alpha;
     }
 
-    void sortMovesIfEnabled(List<Move> possibleMoves){
+    List<Move> getSortedWithPVTableIfEnabled(List<Move> legalMoves){
+        Move pvMove = pvTablesEnabled ? pvTable.getOrDefault(game.toString(), null) : null;
+        return pvMove != null ? getSortedMoves(legalMoves, pvMove) : getSortedMoves(legalMoves);
+    }
+
+    // doesn't seem to hurt performance that bad
+    List<Move> getSortedMoves(List<Move> possibleMoves){
+        List<Pair<Move, Integer>> tags = new ArrayList<>();
+        for(Move move : possibleMoves){
+            tags.add(FeatureBasedEvaluationMethod.getTag(move));
+        }
+        return FeatureBasedEvaluationMethod.sortMovesByTags(tags);
+    }
+
+    List<Move> getSortedMoves(List<Move> possibleMoves, Move pvMove){
+        List<Pair<Move, Integer>> tags = new ArrayList<>();
+        for(Move move : possibleMoves){
+            tags.add(FeatureBasedEvaluationMethod.getTag(move, pvMove));
+        }
+        return FeatureBasedEvaluationMethod.sortMovesByTags(tags);
+    }
+
+    // for captures
+    void sortCapturesIfEnabled(List<Move> possibleMoves){
         if(moveSortingEnabled){
             FeatureBasedEvaluationMethod.sortMoves(possibleMoves);
         }
@@ -160,7 +204,9 @@ public class Minimax implements Runnable{
         List<Move> legalMoves = game.getLegalMoves();
         assert !legalMoves.isEmpty() : "game already over";
 
-        sortMovesIfEnabled(legalMoves);
+        if(moveSortingEnabled) {
+            legalMoves = getSortedWithPVTableIfEnabled(legalMoves);
+        }
         int color = game.whoseTurn == PieceColor.White ? 1 : -1;
 
         while(!isTimeUp()) {
@@ -179,6 +225,7 @@ public class Minimax implements Runnable{
                 if (score > bestValueAtDepth) {
                     bestValueAtDepth = score;
                     bestMoveAtDepth = move;
+                    insertIntoPVTableIfEnabled(move);
                 }
 
                 if (isTimeUp()) {
@@ -191,6 +238,11 @@ public class Minimax implements Runnable{
                 bestValueAcrossDepths = bestValueAtDepth;
                 quiescenceDepthReached = quiescenceDepthForSearchDepth();
                 searchDepthReached++;
+            }
+            // we haven't completed a single layer in the given time, pick unfinished
+            else if(isTimeUp() && bestMoveAcrossDepths == null){
+                bestMoveAcrossDepths = bestMoveAtDepth;
+                bestValueAcrossDepths = bestValueAtDepth;
             }
 
             // mate found (prefer the quickest mate)

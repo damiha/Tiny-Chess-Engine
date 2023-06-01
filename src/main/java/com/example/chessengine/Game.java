@@ -258,7 +258,7 @@ public class Game {
 
     private void executeMove(Move move, boolean guaranteedToBeLegal){
 
-        assert insideBoard(move.endingPosition) : "ERROR: illegal move!";
+        assert GameUtils.insideBoard(move.endingPosition) : "ERROR: illegal move!";
         assert !isOver() : "ERROR: game is over!";
         assert !(move.getCapturedPiece() instanceof King) : "ERROR: illegal king capture!";
 
@@ -359,16 +359,12 @@ public class Game {
         }
     }
 
-    public static boolean insideBoard(int[] position){
-        return position[0] >= 0 && position[0] <= 7 && position[1]  >= 0 && position[1] <= 7;
-    }
-
     Piece getPieceAt(int[] coords){
-        return insideBoard(coords) ? position[coords[1]][coords[0]] : null;
+        return GameUtils.insideBoard(coords) ? position[coords[1]][coords[0]] : null;
     }
 
     boolean canLandOn(int[] coords, PieceColor moverColor){
-        return insideBoard(coords) && (getPieceAt(coords) == null || getPieceAt(coords).color != moverColor);
+        return GameUtils.insideBoard(coords) && (getPieceAt(coords) == null || getPieceAt(coords).color != moverColor);
     }
     boolean canCaptureSomethingAt(int[] coords, PieceColor moverColor){
         return canLandOn(coords, moverColor) && getPieceAt(coords) != null;
@@ -383,29 +379,39 @@ public class Game {
         }
         return movesOfSelectedPiece;
     }
-    // get all moves the current player (whose turn) can currently make
-    List<Move> getLegalMoves(){
-        return getLegalMoves(false);
-    }
 
-    List<Move> getLegalCaptures(){
-        return getLegalMoves(true);
+    List<Move> getPseudoLegalCaptures(){
+        assert !isOver() : "too far";
+
+        List<Move> pseudoLegalCaptures = new ArrayList<>();
+        // if king is not in check, we can only walk into check or move a pinned piece
+        // if king is in check, we either walk away from it or capture or block (that's too complicated, check everything there)
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                if (position[y][x] != null && position[y][x].color == whoseTurn) {
+                    Piece pieceToBeMoved = position[y][x];
+                    pseudoLegalCaptures.addAll(pieceToBeMoved.getPossibleMoves().stream().filter(Move::isCapture).toList());
+                }
+            }
+        }
+        return pseudoLegalCaptures;
     }
 
     // tactical moves are captures, checks and check evasions
-    private List<Move> getLegalMoves(boolean onlyCaptures){
+    public List<Move> getLegalMoves(){
 
         assert !isOver() : "too far";
 
         List<Move> legalMoves = new ArrayList<>();
+        PieceColor oppositeColor = whoseTurn.getOppositeColor();
 
         King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
         King kingToBeAttacked = whoseTurn == PieceColor.White ? blackKing : whiteKing;
 
         Set<Piece> pinnedPieces = getPinnedPieces(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
-        HashMap<String, CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
+        Set<Square> squaresAttackedByOpponent = getAttackedSquares(oppositeColor);
+        Set<CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
 
-        PieceColor oppositeColor = whoseTurn.getOppositeColor();
         boolean kingInCheck = inCheck();
 
         // if king is not in check, we can only walk into check or move a pinned piece
@@ -418,52 +424,45 @@ public class Game {
                     Piece pieceToBeMoved = position[y][x];
                     List<Move> possiblePieceMoves = pieceToBeMoved.getPossibleMoves();
 
-                    if(onlyCaptures){
-                        possiblePieceMoves = possiblePieceMoves.stream().filter(Move::isCapture).toList();
-                    }
-
                     // if destination is a square were check can be given and the piece has the right type, mark as check
                     for(Move move : possiblePieceMoves){
-                        if(checkSquares.containsKey(GameUtils.coordsToString(move.endingPosition))){
-                            CheckSquare square = checkSquares.get(GameUtils.coordsToString(move.endingPosition));
-                            if((square.checkByPawn && pieceToBeMoved instanceof Pawn)
-                                    || (square.checkByBishop && (pieceToBeMoved instanceof Bishop || pieceToBeMoved instanceof Queen))
-                                    || (square.checkByKnight && pieceToBeMoved instanceof Knight)
-                                    || (square.checkByRook && (pieceToBeMoved instanceof Rook || pieceToBeMoved instanceof Queen))){
+                        if(checkSquares.contains(new CheckSquare(move.endingPosition, pieceToBeMoved))){
                                 move.markAsCheck();
-                            }
                         }
                     }
 
-                    boolean checkNotNecessary = (!kingInCheck && !(pieceToBeMoved instanceof  King) && !pinnedPieces.contains(pieceToBeMoved));
+                    // deal with king moves
+                    if(pieceToBeMoved instanceof King) {
+                        for (Move candidateMove : possiblePieceMoves) {
+                            // king can't walk into check
+                            if (squaresAttackedByOpponent.contains(new Square(candidateMove.endingPosition))) {
+                                continue;
+                            }
+                            // king can't castle through check, out of check
+                            if (candidateMove.isCastle() && (kingInCheck
+                                        || (candidateMove.isShortCastle && squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x + 1, kingToBeProtected.y)))
+                                        || (candidateMove.isLongCastle && squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x - 1, kingToBeProtected.y))))) {
+                                    continue;
+                            }
 
-                    if(checkNotNecessary){
-                        if(!onlyCaptures) {
-                            pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
+                            // passed both tests so valid
+                            legalMoves.add(candidateMove);
                         }
+                    }
+                    // no danger and not pinned
+                    else if(!kingInCheck && !pinnedPieces.contains(pieceToBeMoved)){
+                        pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
                         legalMoves.addAll(possiblePieceMoves);
                     }
+                    // in danger or pinned piece
                     else {
                         // reset and increment for every legal move
                         pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
                         for (Move candidateMove : possiblePieceMoves) {
-
-                            // can't castle out of check, through check, immediately discard those
-                            if (candidateMove.isCastle()) {
-                                if (kingInCheck ||
-                                        (candidateMove.isShortCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x + 1, kingToBeProtected.y))
-                                        || (candidateMove.isLongCastle && isSquareAttackedBy(oppositeColor, kingToBeProtected.x - 1, kingToBeProtected.y))) {
-                                    continue;
-                                }
-                            }
-                            // we can only run into checkmate if a defender that's pinned moves or king moves
-                            // we only generate moves for one side
                             executePossiblyIllegalMove(candidateMove);
                             if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
                                 legalMoves.add(candidateMove);
-                                if(!onlyCaptures) {
-                                    pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
-                                }
+                                pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
                             }
                             undoLastMove();
                         }
@@ -472,7 +471,7 @@ public class Game {
             }
         }
         // either checkmate or stalemate
-        if(!onlyCaptures && legalMoves.isEmpty()){
+        if(legalMoves.isEmpty()){
             // checkmate
             if(kingInCheck){
                 outcome = (whoseTurn.getOppositeColor() == PieceColor.Black ? Outcome.BlackWon : Outcome.WhiteWon);
@@ -482,6 +481,20 @@ public class Game {
             }
         }
         return legalMoves;
+    }
+
+    public Set<Square> getAttackedSquares(PieceColor color){
+
+        Set<Square> attackedSquares = new HashSet<>();
+
+        for(int y = 0; y < 8; y++){
+            for(int x = 0; x < 8; x++){
+                if(position[y][x] != null && position[y][x].color == color){
+                    attackedSquares.addAll(position[y][x].getAttackedSquares());
+                }
+            }
+        }
+        return attackedSquares;
     }
 
     public Outcome getOutcome(){
@@ -522,7 +535,7 @@ public class Game {
 
     boolean isSquareAttackedBy(PieceColor color, int x, int y){
         // check all diagonals
-        List<BiFunction<int[], Integer, int[]>> diagonals = List.of(getULDiagonal, getURDiagonal, getLLDiagonal, getLRDiagonal);
+        List<BiFunction<int[], Integer, int[]>> diagonals = List.of(GameUtils.getULDiagonal, GameUtils.getURDiagonal, GameUtils.getLLDiagonal, GameUtils.getLRDiagonal);
         for(BiFunction<int[], Integer, int[]> getLocation : diagonals){
             Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
             if(firstPieceOnPath != null && firstPieceOnPath.color == color && canDiagonallyCapture(firstPieceOnPath, x, y)){
@@ -530,7 +543,7 @@ public class Game {
             }
         }
         // check all lines
-        List<BiFunction<int[], Integer, int[]>> lines = List.of(getLeft, getRight, getUp, getDown);
+        List<BiFunction<int[], Integer, int[]>> lines = List.of(GameUtils.getLeft, GameUtils.getRight, GameUtils.getUp, GameUtils.getDown);
         for(BiFunction<int[], Integer, int[]> getLocation : lines){
             Piece firstPieceOnPath = getFirstPieceOnPath(x, y, getLocation);
             if(firstPieceOnPath != null && firstPieceOnPath.color == color && canCaptureStraight(firstPieceOnPath, x, y)){
@@ -539,7 +552,7 @@ public class Game {
         }
         // check knight moves
         for(int i = 0; i < 8; i++){
-            int[] location = getKnightMoves.apply(new int[]{x, y}, i);
+            int[] location = GameUtils.getKnightMoves.apply(new int[]{x, y}, i);
             Piece pieceAtLocation = getPieceAt(location);
 
             if(pieceAtLocation != null && pieceAtLocation.color == color && pieceAtLocation instanceof Knight){
@@ -555,9 +568,10 @@ public class Game {
         Set<Piece> pinnedPieces = new HashSet<>();
 
         List<BiFunction<int[], Integer, int[]>> diagonals =
-                List.of(getULDiagonal, getURDiagonal, getLLDiagonal, getLRDiagonal);
+                List.of(GameUtils.getULDiagonal, GameUtils.getURDiagonal, GameUtils.getLLDiagonal,
+                        GameUtils.getLRDiagonal);
         List<BiFunction<int[], Integer, int[]>> lines =
-                List.of(getUp, getRight, getDown, getLeft);
+                List.of(GameUtils.getUp, GameUtils.getRight, GameUtils.getDown, GameUtils.getLeft);
 
         for(BiFunction<int[], Integer, int[]> getLocation : diagonals){
             Piece pinnedPiece = getPinnedPieceOnPath(color, x, y, getLocation, "diagonal");
@@ -579,6 +593,10 @@ public class Game {
         return getPinnedPieces(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
     }
 
+    public King getKingToBeAttacked(){
+        return whoseTurn == PieceColor.White ? blackKing : whiteKing;
+    }
+
     public Piece getPinnedPieceOnPath(PieceColor defendingColor, int x, int y, BiFunction<int[], Integer, int[]> getLocation, String movement){
 
         Piece firstPiece = null;
@@ -586,7 +604,7 @@ public class Game {
         for(int i = 1;i < 8;i++){
             int[] location = getLocation.apply(new int[]{x, y}, i);
 
-            if(!insideBoard(location)){
+            if(!GameUtils.insideBoard(location)){
                 return null;
             }
             Piece pieceAtLocation = getPieceAt(location);
@@ -610,20 +628,22 @@ public class Game {
         return null;
     }
 
-    HashMap<String, CheckSquare> getCheckSquares(King kingToBeAttacked){
-        HashMap<String, CheckSquare> squares = new HashMap<>();
+    Set<CheckSquare> getCheckSquares(King kingToBeAttacked){
+        Set<CheckSquare> squares = new HashSet<>();
         // diagonals so bishop moves
-        List<BiFunction<int[], Integer, int[]>> diagonals = List.of(getULDiagonal, getURDiagonal, getLLDiagonal, getLRDiagonal);
+        List<BiFunction<int[], Integer, int[]>> diagonals =
+                List.of(GameUtils.getULDiagonal, GameUtils.getURDiagonal, GameUtils.getLLDiagonal, GameUtils.getLRDiagonal);
+
         for(BiFunction<int[], Integer, int[]> getLocation : diagonals){
             addCheckSquaresOnPath(squares, kingToBeAttacked, getLocation, "diagonal");
         }
         // vertical/horizontal moves
-        List<BiFunction<int[], Integer, int[]>> lines = List.of(getLeft, getRight, getUp, getDown);
+        List<BiFunction<int[], Integer, int[]>> lines = List.of(GameUtils.getLeft, GameUtils.getRight, GameUtils.getUp, GameUtils.getDown);
         for(BiFunction<int[], Integer, int[]> getLocation : lines){
             addCheckSquaresOnPath(squares, kingToBeAttacked, getLocation, "straight");
         }
         // knight moves
-        addCheckSquaresOnPath(squares, kingToBeAttacked, getKnightMoves, "knight");
+        addCheckSquaresOnPath(squares, kingToBeAttacked, GameUtils.getKnightMoves, "knight");
         return squares;
     }
 
@@ -649,35 +669,13 @@ public class Game {
 
         return piece instanceof Rook || piece instanceof Queen || (piece instanceof King && kingCloseEnoughX && kingCloseEnoughY);
     }
-    public BiFunction<int[], Integer, int[]> getULDiagonal = (pos, i) -> new int[]{pos[0] - i, pos[1] - i};
-    public BiFunction<int[], Integer, int[]> getURDiagonal = (pos, i) -> new int[]{pos[0] + i, pos[1] - i};
-    public BiFunction<int[], Integer, int[]> getLLDiagonal = (pos, i) -> new int[]{pos[0] - i, pos[1] + i};
-    public BiFunction<int[], Integer, int[]> getLRDiagonal = (pos, i) -> new int[]{pos[0] + i, pos[1] + i};
-    public BiFunction<int[], Integer, int[]> getLeft = (pos, i) -> new int[]{pos[0] - i, pos[1]};
-    public BiFunction<int[], Integer, int[]> getRight = (pos, i) -> new int[]{pos[0] + i, pos[1]};
-    public BiFunction<int[], Integer, int[]> getUp = (pos, i) -> new int[]{pos[0], pos[1] - i};
-    public BiFunction<int[], Integer, int[]> getDown = (pos, i) -> new int[]{pos[0], pos[1] + i};
-
-    public BiFunction<int[], Integer, int[]> getKnightMoves = (pos, i) -> {
-        i = i % 8;
-        return switch(i){
-            case 0 -> new int[]{pos[0] - 1, pos[1] - 2};
-            case 1 -> new int[]{pos[0] + 1, pos[1] - 2};
-            case 2 -> new int[]{pos[0] + 2, pos[1] - 1};
-            case 3 -> new int[]{pos[0] + 2, pos[1] + 1};
-            case 4 -> new int[]{pos[0] + 1, pos[1] + 2};
-            case 5 -> new int[]{pos[0] - 1, pos[1] + 2};
-            case 6 -> new int[]{pos[0] - 2, pos[1] + 1};
-            default -> new int[]{pos[0] -2, pos[1] - 1};
-        };
-    };
 
     public Piece getFirstPieceOnPath(int x, int y, BiFunction<int[], Integer, int[]> getLocation){
         // no path on a chess board is longer than 8 squares
         for(int i = 1;i < 8;i++){
             int[] location = getLocation.apply(new int[]{x, y}, i);
 
-            if(!insideBoard(location)){
+            if(!GameUtils.insideBoard(location)){
                 return null;
             }
             Piece pieceAtLocation = getPieceAt(location);
@@ -687,11 +685,21 @@ public class Game {
         }
         return null;
     }
-    public void addCheckSquaresOnPath(HashMap<String, CheckSquare> checkSquares, King kingToBeAttacked, BiFunction<int[], Integer, int[]> getLocation, String movement){
+    public void addCheckSquaresOnPath(Set<CheckSquare> checkSquares, King kingToBeAttacked, BiFunction<int[], Integer, int[]> getLocation, String movement){
 
         // no path on a chess board is longer than 8 squares
-        for(int i = 1;i < 8;i++){
+        for(int i = 1;i <= 8;i++){
             int[] location = getLocation.apply(new int[]{kingToBeAttacked.x, kingToBeAttacked.y}, i);
+
+            // sliding pieces are stopped by edge of the board, knights only skip
+            if(!GameUtils.insideBoard(location)){
+                if(movement.equals("knight")){
+                    continue;
+                }
+                else{
+                    break;
+                }
+            }
 
             Piece pieceAtLocation = getPieceAt(location);
 
@@ -701,25 +709,21 @@ public class Game {
             if(canGiveCheckOnEmptySquare || canGiveCheckByCapturing){
                 CheckSquare checkSquare = new CheckSquare(location[0], location[1]);
 
-                if(movement.equals("straight")){
-                    checkSquare.checkByRook = true;
-                }
-                else if(movement.equals("knight")){
-                    checkSquare.checkByKnight = true;
-                }
-                else if(movement.equals("diagonal")){
-                    checkSquare.checkByBishop = true;
-                    boolean towardsKing = (kingToBeAttacked.color == PieceColor.White && location[1] < kingToBeAttacked.y)
-                            || (kingToBeAttacked.color == PieceColor.Black && location[1] > kingToBeAttacked.y);
-
-                    boolean pawnCanCapture = towardsKing && i == 1;
-
-                    if(pawnCanCapture){
-                        checkSquare.checkByPawn = true;
+                switch (movement) {
+                    case "straight" -> checkSquare.checkByRook = true;
+                    case "knight" -> checkSquare.checkByKnight = true;
+                    case "diagonal" -> {
+                        checkSquare.checkByBishop = true;
+                        boolean towardsKing = (kingToBeAttacked.color == PieceColor.White && location[1] < kingToBeAttacked.y)
+                                || (kingToBeAttacked.color == PieceColor.Black && location[1] > kingToBeAttacked.y);
+                        boolean pawnCanCapture = towardsKing && i == 1;
+                        if (pawnCanCapture) {
+                            checkSquare.checkByPawn = true;
+                        }
                     }
                 }
 
-                checkSquares.put(GameUtils.coordsToString(location), checkSquare);
+                checkSquares.add(checkSquare);
             }
             if(!canGiveCheckOnEmptySquare && !movement.equals("knight")){
                 break;

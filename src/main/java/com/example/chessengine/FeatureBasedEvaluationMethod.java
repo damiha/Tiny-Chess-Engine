@@ -1,5 +1,9 @@
 package com.example.chessengine;
 
+import javafx.util.Pair;
+
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class FeatureBasedEvaluationMethod extends EvaluationMethod {
@@ -287,33 +291,68 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
 
     // sort in place
     public static void sortMoves(List<Move> moves){
-        moves.sort((m1, m2) -> {
+        moves.sort(FeatureBasedEvaluationMethod::compare);
+    }
 
-            int checkComparison = Integer.compare((m1.isCheck() ? -1 : 1), (m2.isCheck() ? -1 : 1));
-            if(checkComparison != 0){
-                return checkComparison;
-            }
+    public static int compare(Move m1, Move m2){
 
-            int captureComparison = Integer.compare((m1.isCapture() ? -1 : 1), (m2.isCapture() ? -1 : 1));
-            if(captureComparison != 0){
-                return captureComparison;
-            }
-            // both are captures or non-captures
-            if(m1.isCapture()){
-                // sort by value difference descending (highest one first)
-                double m1ValueDifference = getCaptureValueDifference(m1);
-                double m2ValueDifference = getCaptureValueDifference(m2);
-                return Double.compare(-m1ValueDifference, -m2ValueDifference);
-            }
-            // both are non-captures
-            int promotionComparison = Integer.compare((m1.isPromotion() ? -1 : 1), (m2.isPromotion() ? -1 : 1));
-            if(promotionComparison != 0){
-                return promotionComparison;
-            }
-            // non-capture, non promotion
-            // investigate most mobile pieces first (minus for descending sort)
-            return Integer.compare(-getMobilityScore(m1.piece), -getMobilityScore(m2.piece));
-        });
+        int checkComparison = Integer.compare((m1.isCheck() ? -1 : 1), (m2.isCheck() ? -1 : 1));
+        if(checkComparison != 0){
+            return checkComparison;
+        }
+
+        int captureComparison = Integer.compare((m1.isCapture() ? -1 : 1), (m2.isCapture() ? -1 : 1));
+        if(captureComparison != 0){
+            return captureComparison;
+        }
+        // both are captures or non-captures
+        if(m1.isCapture()){
+            // sort by value difference descending (highest one first)
+            double m1ValueDifference = getCaptureValueDifference(m1);
+            double m2ValueDifference = getCaptureValueDifference(m2);
+            return Double.compare(-m1ValueDifference, -m2ValueDifference);
+        }
+        // both are non-captures
+        int promotionComparison = Integer.compare((m1.isPromotion() ? -1 : 1), (m2.isPromotion() ? -1 : 1));
+        if(promotionComparison != 0){
+            return promotionComparison;
+        }
+        // non-capture, non promotion
+        // investigate most mobile pieces first (minus for descending sort)
+        return Integer.compare(-getMobilityScore(m1.piece), -getMobilityScore(m2.piece));
+    }
+
+    public static Pair<Move, Integer> getTag(Move move){
+        // high priority is good
+        return new Pair<>(move, getPriority(move));
+    }
+
+    private static int getPriority(Move move){
+        int priority =  10000 * (move.isCheck() ? 1 : 0);
+        priority +=     5000 * (move.isCapture() ? 1 : 0);
+        priority +=     100 * (move.isCapture() ? getCaptureValueDifference(move) : 0);
+        priority +=     5000 * (move.isPromotion() ? 1 : 0);
+        priority +=     10 * getMobilityScore(move.piece);
+        return priority;
+    }
+
+    public static Pair<Move, Integer> getTag(Move move, Move pvMove){
+        boolean sameMove =  move.piece == pvMove.piece &&
+                (move.endingPosition[0] == pvMove.endingPosition[0]) &&
+                (move.endingPosition[1] == pvMove.endingPosition[1]);
+
+        int priority = getPriority(move) + (sameMove ? 100000 : 0);
+
+        return new Pair<>(move, priority);
+    }
+
+    public static List<Move> sortMovesByTags(List<Pair<Move, Integer>> tags){
+        List<Move> sortedMoves = new ArrayList<>(tags.size());
+        tags.sort(Comparator.comparingInt(t -> -t.getValue()));
+        for(Pair<Move, Integer> tag : tags){
+            sortedMoves.add(tag.getKey());
+        }
+        return sortedMoves;
     }
 
     private static int getMobilityScore(Piece piece){

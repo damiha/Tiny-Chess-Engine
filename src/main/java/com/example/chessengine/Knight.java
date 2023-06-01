@@ -2,6 +2,7 @@ package com.example.chessengine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class Knight extends Piece{
     public Knight(PieceColor color, int x, int y, Game game) {
@@ -37,6 +38,12 @@ public class Knight extends Piece{
 
         return moves;
     }
+
+    @Override
+    public Set<Square> getAttackedSquares() {
+        return GameUtils.getAttackSquareOfLeaping(game, x, y, GameUtils.getKnightMoves);
+    }
+
 
     @Override
     public String toString() {
