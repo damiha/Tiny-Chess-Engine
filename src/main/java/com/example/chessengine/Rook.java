@@ -71,7 +71,7 @@ public class Rook extends Piece{
     public Set<Square> getAttackedSquares() {
         Set<Square> attackSquares = new HashSet<>();
         for(BiFunction<int[], Integer, int[]> lines : GameUtils.lines){
-            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, x, y, lines));
+            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, this, lines));
         }
         return attackSquares;
     }

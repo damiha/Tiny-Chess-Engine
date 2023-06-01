@@ -99,10 +99,10 @@ public class Pawn extends Piece{
 
         Set<Square> attackedSquares = new HashSet<>();
         if(x >= 1){
-            attackedSquares.add(new Square(leftCapture));
+            attackedSquares.add(new Square(leftCapture, this));
         }
         if(x <= 6){
-            attackedSquares.add(new Square(rightCapture));
+            attackedSquares.add(new Square(rightCapture, this));
         }
         return attackedSquares;
     }

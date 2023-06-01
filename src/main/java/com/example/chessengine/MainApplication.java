@@ -12,6 +12,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -96,8 +97,9 @@ public class MainApplication extends Application {
     int maxSecondsToRespond;
 
     Set<Piece> pinnedPieces;
-    Set<Square> attackedSquares;
+    HashMap<Square, Square> attackedSquares;
     Set<CheckSquare> checkSquares;
+    Set<Piece> checkers;
 
     @Override
     public void start(Stage stage) {
@@ -271,6 +273,9 @@ public class MainApplication extends Application {
                 if(event.getCode() == KeyCode.C){
                     gameGUI.highlightCheckSquares = !gameGUI.highlightCheckSquares;
                 }
+                if(event.getCode() == KeyCode.X){
+                    gameGUI.highlightCheckers = !gameGUI.highlightCheckers;
+                }
             }
         });
 
@@ -321,10 +326,13 @@ public class MainApplication extends Application {
                 gameGUI.drawPinnedPieces(pinnedPieces);
             }
             if(gameGUI.highlightAttackedSquares){
-                gameGUI.drawAttackedSquares(attackedSquares);
+                gameGUI.drawAttackedSquares(attackedSquares.keySet());
             }
             if(gameGUI.highlightCheckSquares){
                 gameGUI.drawCheckSquares(checkSquares);
+            }
+            if(gameGUI.highlightCheckers){
+                gameGUI.drawCheckers(checkers);
             }
             gameGUI.drawPosition(positionToDisplay);
 
@@ -355,6 +363,7 @@ public class MainApplication extends Application {
         pinnedPieces = game.getPinnedPieces();
         attackedSquares = game.getAttackedSquares(game.whoseTurn.getOppositeColor());
         checkSquares = game.getCheckSquares(game.getKingToBeAttacked());
+        checkers = game.getCheckers(attackedSquares, game.getKingToBeProtected());
     }
 
     boolean isInGame(){
@@ -480,6 +489,7 @@ public class MainApplication extends Application {
                 "[P] to show pinned pieces",
                 "[A] to show attacked squares",
                 "[C] to show check squares",
+                "[X] to show checkers",
                 "",
                 evaluationSummary,
         };

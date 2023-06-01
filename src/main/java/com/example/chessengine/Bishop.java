@@ -47,7 +47,7 @@ public class Bishop extends Piece{
     public Set<Square> getAttackedSquares() {
         Set<Square> attackSquares = new HashSet<>();
         for(BiFunction<int[], Integer, int[]> diagonal : GameUtils.diagonals){
-            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, x, y, diagonal));
+            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, this, diagonal));
         }
         return attackSquares;
     }

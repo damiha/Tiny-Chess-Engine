@@ -57,25 +57,25 @@ public class GameUtils {
     public static List<BiFunction<int[], Integer, int[]>> diagonals = List.of(getULDiagonal, getURDiagonal, getLLDiagonal, getLRDiagonal);
     public static List<BiFunction<int[], Integer, int[]>> lines = List.of(getLeft, getRight, getUp, getDown);
 
-    public static Set<Square> getAttackSquareOfLeaping(Game game, int x, int y, BiFunction<int[], Integer, int[]> getLocation){
-        return getAttackSquares(game, x, y, getLocation, false);
+    public static Set<Square> getAttackSquareOfLeaping(Game game, Piece attacker, BiFunction<int[], Integer, int[]> getLocation){
+        return getAttackSquares(game, attacker, getLocation, false);
     }
-    public static Set<Square> getAttackSquareOfSliding(Game game, int x, int y, BiFunction<int[], Integer, int[]> getLocation){
-        return getAttackSquares(game, x, y, getLocation, true);
+    public static Set<Square> getAttackSquareOfSliding(Game game, Piece attacker, BiFunction<int[], Integer, int[]> getLocation){
+        return getAttackSquares(game,attacker, getLocation, true);
     }
-    private static Set<Square> getAttackSquares(Game game, int x, int y, BiFunction<int[], Integer, int[]> getLocation, boolean isSliding){
+    private static Set<Square> getAttackSquares(Game game, Piece attacker, BiFunction<int[], Integer, int[]> getLocation, boolean isSliding){
 
-        int[] startingPosition = {x, y};
+        int[] startingPosition = {attacker.x, attacker.y};
         Set<Square> attackedSquares = new HashSet<>();
 
         for(int i = 1; i <= 8; i++){
             int[] location = getLocation.apply(startingPosition, i);
 
             if(insideBoard(location)){
-                Piece piece = game.getPieceAt(location);
-                attackedSquares.add(new Square(location));
+                Piece other = game.getPieceAt(location);
+                attackedSquares.add(new Square(location, attacker));
 
-                if(piece != null && isSliding){
+                if(other != null && isSliding){
                     break;
                 }
             }

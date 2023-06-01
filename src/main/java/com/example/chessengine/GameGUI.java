@@ -4,6 +4,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
@@ -45,8 +46,8 @@ public class GameGUI {
 
     boolean highlightPinnedPieces;
     boolean highlightAttackedSquares;
-
     boolean highlightCheckSquares;
+    boolean highlightCheckers;
 
     public GameGUI(int windowWidth, int windowHeight, GraphicsContext gc){
         this.windowWidth = windowWidth;
@@ -63,6 +64,7 @@ public class GameGUI {
         highlightPinnedPieces = false;
         highlightAttackedSquares = false;
         highlightCheckSquares = false;
+        highlightCheckers = false;
     }
 
     public void setPerspective(PieceColor perspective){
@@ -179,6 +181,17 @@ public class GameGUI {
         for(Square square : attackedSquares){
             gc.setFill(checkSquareHighlightColor);
             int[] pos = coordToPixel(new int[]{square.x, square.y});
+            gc.fillRect(pos[0] , pos[1], tileLength, tileLength);
+        }
+    }
+
+    public void drawCheckers(Set<Piece> checkers){
+
+        Color checkSquareHighlightColor = new Color(1, 0, 1, 0.5);
+
+        for(Piece piece : checkers){
+            gc.setFill(checkSquareHighlightColor);
+            int[] pos = coordToPixel(piece.position);
             gc.fillRect(pos[0] , pos[1], tileLength, tileLength);
         }
     }

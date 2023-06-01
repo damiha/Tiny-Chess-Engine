@@ -41,7 +41,7 @@ public class Knight extends Piece{
 
     @Override
     public Set<Square> getAttackedSquares() {
-        return GameUtils.getAttackSquareOfLeaping(game, x, y, GameUtils.getKnightMoves);
+        return GameUtils.getAttackSquareOfLeaping(game, this, GameUtils.getKnightMoves);
     }
 
 

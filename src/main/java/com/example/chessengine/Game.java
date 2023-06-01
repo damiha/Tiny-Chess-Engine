@@ -398,10 +398,11 @@ public class Game {
         // consider a pawn of the right (defending) color with en passant possibility automatically as pinned
         // to be pinned doesn't mean that it can't move, just more checks
 
-        Set<Square> squaresAttackedByOpponent = getAttackedSquares(oppositeColor);
+        HashMap<Square, Square> squaresAttackedByOpponent = getAttackedSquares(oppositeColor);
         Set<CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
 
-        boolean isKingInCheck = squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x, kingToBeProtected.y));
+        boolean isKingInCheck = squaresAttackedByOpponent.containsKey(new Square(kingToBeProtected.x, kingToBeProtected.y));
+        Set<Piece> checkers = getCheckers(squaresAttackedByOpponent, kingToBeProtected);
 
         if(whoseTurn == PieceColor.White){
             isWhiteKingInCheck = isKingInCheck;
@@ -431,13 +432,13 @@ public class Game {
                     if(pieceToBeMoved instanceof King) {
                         for (Move candidateMove : possiblePieceMoves) {
                             // king can't walk into check
-                            if (squaresAttackedByOpponent.contains(new Square(candidateMove.endingPosition))) {
+                            if (squaresAttackedByOpponent.containsKey(new Square(candidateMove.endingPosition))) {
                                 continue;
                             }
                             // king can't castle through check, out of check
                             if (candidateMove.isCastle() && (isKingInCheck
-                                        || (candidateMove.isShortCastle && squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x + 1, kingToBeProtected.y)))
-                                        || (candidateMove.isLongCastle && squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x - 1, kingToBeProtected.y))))) {
+                                        || (candidateMove.isShortCastle && squaresAttackedByOpponent.containsKey(new Square(kingToBeProtected.x + 1, kingToBeProtected.y)))
+                                        || (candidateMove.isLongCastle && squaresAttackedByOpponent.containsKey(new Square(kingToBeProtected.x - 1, kingToBeProtected.y))))) {
                                     continue;
                             }
 
@@ -445,22 +446,22 @@ public class Game {
                             legalMoves.add(candidateMove);
                         }
                     }
-                    // no danger and not pinned
-                    else if(!isKingInCheck && !pinnedPieces.contains(pieceToBeMoved) && !isEnPassantPinned(pieceToBeMoved, possiblePieceMoves)){
-                        pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
-                        legalMoves.addAll(possiblePieceMoves);
-                    }
-                    // in danger or pinned piece (also en passant pinned), can still move, but we need to check
                     else {
-                        // reset and increment for every legal move
-                        pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
-                        for (Move candidateMove : possiblePieceMoves) {
-                            executePossiblyIllegalMove(candidateMove);
-                            if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
-                                legalMoves.add(candidateMove);
-                                pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
-                            }
-                            undoLastMove();
+                        // no danger and not pinned
+                        boolean isPinned = pinnedPieces.contains(pieceToBeMoved) || isEnPassantPinned(pieceToBeMoved, possiblePieceMoves);
+
+                        if (!isKingInCheck && !isPinned) {
+                            pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
+                            legalMoves.addAll(possiblePieceMoves);
+                        }
+                        // pinned piece (also en passant pinned)
+                        else if (isPinned) {
+                            bruteForceCheck(pieceToBeMoved, possiblePieceMoves, legalMoves);
+                        }
+                        // we are in check (only need to consider single check since in double check, king needs to move)
+                        // and we already have all the king moves so no other piece moves get added
+                        else if(checkers.size() == 1){
+                            bruteForceCheckAndPassCaptureOfChecker(pieceToBeMoved, possiblePieceMoves, legalMoves, checkers.stream().findFirst().get());
                         }
                     }
                 }
@@ -479,18 +480,82 @@ public class Game {
         return legalMoves;
     }
 
-    public Set<Square> getAttackedSquares(PieceColor color){
+    void bruteForceCheck(Piece pieceToBeMoved, List<Move> possiblePieceMoves, List<Move> legalMoves){
 
-        Set<Square> attackedSquares = new HashSet<>();
+        King kingToBeProtected = getKingToBeProtected();
+        PieceColor oppositeColor = kingToBeProtected.color.getOppositeColor();
+
+        // reset and increment for every legal move
+        pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
+        for (Move candidateMove : possiblePieceMoves) {
+            executePossiblyIllegalMove(candidateMove);
+            if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
+                legalMoves.add(candidateMove);
+                pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
+            }
+            undoLastMove();
+        }
+    }
+
+    void bruteForceCheckAndPassCaptureOfChecker(Piece pieceToBeMoved, List<Move> possiblePieceMoves, List<Move> legalMoves, Piece checker){
+
+        King kingToBeProtected = getKingToBeProtected();
+        PieceColor oppositeColor = kingToBeProtected.color.getOppositeColor();
+
+        // reset and increment for every legal move
+        pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
+        for (Move candidateMove : possiblePieceMoves) {
+
+            // don't check if we capture the checker (we resolve the check)
+            if(candidateMove.isCapture() && checker == candidateMove.getCapturedPiece()){
+                legalMoves.add(candidateMove);
+                pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
+            }
+            // we didn't capture the checker
+            // TODO: did we block it?
+            else {
+                executePossiblyIllegalMove(candidateMove);
+                if (!isSquareAttackedBy(oppositeColor, kingToBeProtected.x, kingToBeProtected.y)) {
+                    legalMoves.add(candidateMove);
+                    pieceToBeMoved.incrementRecentNumberOfPossibleMoves();
+                }
+                undoLastMove();
+            }
+        }
+    }
+
+    // TODO: awkward solution, change this
+    public HashMap<Square, Square> getAttackedSquares(PieceColor color){
+
+        HashMap<Square, Square> attackedSquares = new HashMap<>();
 
         for(int y = 0; y < 8; y++){
             for(int x = 0; x < 8; x++){
                 if(position[y][x] != null && position[y][x].color == color){
-                    attackedSquares.addAll(position[y][x].getAttackedSquares());
+                   for(Square square : position[y][x].getAttackedSquares()){
+                       // merge
+                       if(attackedSquares.containsKey(square)){
+                           Square alreadyAdded = attackedSquares.get(square);
+                           alreadyAdded.attackedBy.addAll(square.attackedBy);
+                       }
+                       // add new attacked square
+                       else{
+                           attackedSquares.put(square, square);
+                       }
+                   }
                 }
             }
         }
         return attackedSquares;
+    }
+
+    public Set<Piece> getCheckers(HashMap<Square, Square> squaresAttackedByOpponent, King kingToBeProtected){
+
+        Square attackedKingSquare = squaresAttackedByOpponent.getOrDefault(new Square(kingToBeProtected.x, kingToBeProtected.y), null);
+        if(attackedKingSquare != null){
+            return attackedKingSquare.attackedBy;
+        }
+        return new HashSet<>();
     }
 
     public Outcome getOutcome(){
@@ -591,6 +656,10 @@ public class Game {
 
     public King getKingToBeAttacked(){
         return whoseTurn == PieceColor.White ? blackKing : whiteKing;
+    }
+
+    public King getKingToBeProtected(){
+        return whoseTurn == PieceColor.White ? whiteKing : blackKing;
     }
 
     public Piece getPinnedPieceOnPath(PieceColor defendingColor, int x, int y, BiFunction<int[], Integer, int[]> getLocation, String movement){

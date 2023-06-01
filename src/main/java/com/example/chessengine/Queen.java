@@ -42,10 +42,10 @@ public class Queen extends Piece{
     public Set<Square> getAttackedSquares() {
         Set<Square> attackSquares = new HashSet<>();
         for(BiFunction<int[], Integer, int[]> lines : GameUtils.lines){
-            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, x, y, lines));
+            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, this, lines));
         }
         for(BiFunction<int[], Integer, int[]> diagonal : GameUtils.diagonals){
-            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, x, y, diagonal));
+            attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, this, diagonal));
         }
         return attackSquares;
     }
