@@ -100,7 +100,7 @@ public class Game {
         };
     }
 
-    // TODO: update rights
+    // testing for check happens after move is executed
     void undoLastMove(){
         if(!executedMoves.isEmpty()) {
 
@@ -111,16 +111,6 @@ public class Game {
 
             Move move = executedMoves.pop();
             numberOfMovesWithoutProgress = storedNumberOfMovesWithoutProgress.pop();
-
-            // move is made by other side, if current turn is white, move was made by black and gave check
-            if(move.isCheck()){
-                if(whoseTurn == PieceColor.White){
-                    isWhiteKingInCheck = false;
-                }
-                else{
-                    isBlackKingInCheck = false;
-                }
-            }
 
             if(move.isCastle()){
                 undoCastling(move);
@@ -265,15 +255,6 @@ public class Game {
         storedCastleRights.push(new CastleRights(whiteKing, blackKing));
         storedNumberOfMovesWithoutProgress.push(numberOfMovesWithoutProgress);
 
-        if(move.isCheck()){
-            if(whoseTurn == PieceColor.White){
-                isBlackKingInCheck = true;
-            }
-            else{
-                isWhiteKingInCheck = true;
-            }
-        }
-
         // for 50 move rule
         if(move.isCapture() || move.piece instanceof Pawn){
             numberOfMovesWithoutProgress = 0;
@@ -317,20 +298,20 @@ public class Game {
             outcome = Outcome.DrawBy50MoveRule;
         }
 
-        executedMoves.push(move);
-
-        // since move was legal, own king not in check
-        if(guaranteedToBeLegal) {
-            setOwnKingNotInCheck();
+        if(guaranteedToBeLegal){
+            setOwnKingOutOfCheck();
         }
+
+        executedMoves.push(move);
 
         changeTurns();
     }
 
-    void setOwnKingNotInCheck() {
-        if (whoseTurn == PieceColor.White) {
+    void setOwnKingOutOfCheck(){
+        if(whoseTurn == PieceColor.White){
             isWhiteKingInCheck = false;
-        } else {
+        }
+        else{
             isBlackKingInCheck = false;
         }
     }
@@ -397,6 +378,10 @@ public class Game {
         return pseudoLegalCaptures;
     }
 
+    boolean isEnPassantPinned(Piece piece, List<Move> possiblePieceMoves){
+        return piece instanceof Pawn && possiblePieceMoves.stream().anyMatch(Move::isEnPassantCapture);
+    }
+
     // tactical moves are captures, checks and check evasions
     public List<Move> getLegalMoves(){
 
@@ -409,10 +394,21 @@ public class Game {
         King kingToBeAttacked = whoseTurn == PieceColor.White ? blackKing : whiteKing;
 
         Set<Piece> pinnedPieces = getPinnedPieces(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
+
+        // consider a pawn of the right (defending) color with en passant possibility automatically as pinned
+        // to be pinned doesn't mean that it can't move, just more checks
+
         Set<Square> squaresAttackedByOpponent = getAttackedSquares(oppositeColor);
         Set<CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
 
-        boolean kingInCheck = inCheck();
+        boolean isKingInCheck = squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x, kingToBeProtected.y));
+
+        if(whoseTurn == PieceColor.White){
+            isWhiteKingInCheck = isKingInCheck;
+        }
+        else{
+            isBlackKingInCheck = isKingInCheck;
+        }
 
         // if king is not in check, we can only walk into check or move a pinned piece
         // if king is in check, we either walk away from it or capture or block (that's too complicated, check everything there)
@@ -439,7 +435,7 @@ public class Game {
                                 continue;
                             }
                             // king can't castle through check, out of check
-                            if (candidateMove.isCastle() && (kingInCheck
+                            if (candidateMove.isCastle() && (isKingInCheck
                                         || (candidateMove.isShortCastle && squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x + 1, kingToBeProtected.y)))
                                         || (candidateMove.isLongCastle && squaresAttackedByOpponent.contains(new Square(kingToBeProtected.x - 1, kingToBeProtected.y))))) {
                                     continue;
@@ -450,11 +446,11 @@ public class Game {
                         }
                     }
                     // no danger and not pinned
-                    else if(!kingInCheck && !pinnedPieces.contains(pieceToBeMoved)){
+                    else if(!isKingInCheck && !pinnedPieces.contains(pieceToBeMoved) && !isEnPassantPinned(pieceToBeMoved, possiblePieceMoves)){
                         pieceToBeMoved.setRecentNumberOfPossibleMoves(possiblePieceMoves.size());
                         legalMoves.addAll(possiblePieceMoves);
                     }
-                    // in danger or pinned piece
+                    // in danger or pinned piece (also en passant pinned), can still move, but we need to check
                     else {
                         // reset and increment for every legal move
                         pieceToBeMoved.setRecentNumberOfPossibleMoves(0);
@@ -473,7 +469,7 @@ public class Game {
         // either checkmate or stalemate
         if(legalMoves.isEmpty()){
             // checkmate
-            if(kingInCheck){
+            if(isKingInCheck){
                 outcome = (whoseTurn.getOppositeColor() == PieceColor.Black ? Outcome.BlackWon : Outcome.WhiteWon);
             }
             else{

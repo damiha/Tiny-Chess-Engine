@@ -291,35 +291,14 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
 
     // sort in place
     public static void sortMoves(List<Move> moves){
-        moves.sort(FeatureBasedEvaluationMethod::compare);
+        moves.sort(FeatureBasedEvaluationMethod::compareCaptures);
     }
 
-    public static int compare(Move m1, Move m2){
-
-        int checkComparison = Integer.compare((m1.isCheck() ? -1 : 1), (m2.isCheck() ? -1 : 1));
-        if(checkComparison != 0){
-            return checkComparison;
-        }
-
-        int captureComparison = Integer.compare((m1.isCapture() ? -1 : 1), (m2.isCapture() ? -1 : 1));
-        if(captureComparison != 0){
-            return captureComparison;
-        }
-        // both are captures or non-captures
-        if(m1.isCapture()){
-            // sort by value difference descending (highest one first)
-            double m1ValueDifference = getCaptureValueDifference(m1);
-            double m2ValueDifference = getCaptureValueDifference(m2);
-            return Double.compare(-m1ValueDifference, -m2ValueDifference);
-        }
-        // both are non-captures
-        int promotionComparison = Integer.compare((m1.isPromotion() ? -1 : 1), (m2.isPromotion() ? -1 : 1));
-        if(promotionComparison != 0){
-            return promotionComparison;
-        }
-        // non-capture, non promotion
-        // investigate most mobile pieces first (minus for descending sort)
-        return Integer.compare(-getMobilityScore(m1.piece), -getMobilityScore(m2.piece));
+    public static int compareCaptures(Move m1, Move m2){
+        // sort by value difference descending (highest one first)
+        double m1ValueDifference = getCaptureValueDifference(m1);
+        double m2ValueDifference = getCaptureValueDifference(m2);
+        return Double.compare(-m1ValueDifference, -m2ValueDifference);
     }
 
     public static Pair<Move, Integer> getTag(Move move){

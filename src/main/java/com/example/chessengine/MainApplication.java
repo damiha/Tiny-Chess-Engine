@@ -395,7 +395,7 @@ public class MainApplication extends Application {
                             pendingMove = move;
                         }
                         else {
-                            executeHumanMove(move);
+                            executeOnBoard(move);
                         }
                         break;
                     }
@@ -416,7 +416,7 @@ public class MainApplication extends Application {
         }
     }
 
-    void executeHumanMove(Move move){
+    void executeOnBoard(Move move){
 
         executeAndCheckGameOver(move);
         updatePositionToDisplay();
@@ -486,7 +486,7 @@ public class MainApplication extends Application {
     }
 
     void endSuspension(){
-        executeHumanMove(pendingMove);
+        executeOnBoard(pendingMove);
         pendingMove = null;
         suspendedByPromotion = false;
     }

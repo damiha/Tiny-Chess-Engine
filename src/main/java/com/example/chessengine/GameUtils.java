@@ -73,11 +73,10 @@ public class GameUtils {
 
             if(insideBoard(location)){
                 Piece piece = game.getPieceAt(location);
+                attackedSquares.add(new Square(location));
+
                 if(piece != null && isSliding){
                     break;
-                }
-                else if(piece == null){
-                    attackedSquares.add(new Square(location));
                 }
             }
         }

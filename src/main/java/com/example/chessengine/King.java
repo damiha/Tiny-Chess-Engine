@@ -78,7 +78,7 @@ public class King extends Piece{
 
         for(int[] delta : deltas){
             int[] pos = new int[]{x + delta[0], y + delta[1]};
-            if(GameUtils.insideBoard(pos) && game.getPieceAt(pos) == null){
+            if(GameUtils.insideBoard(pos)){
                 attackedSquares.add(new Square(pos));
             }
         }
