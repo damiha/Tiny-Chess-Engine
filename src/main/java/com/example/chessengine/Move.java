@@ -31,7 +31,7 @@ public class Move {
     }
 
     char toLetter(int x){
-        return (char)(x + 65);
+        return (char)(x + 97);
     }
 
     int toChessRow(int x){
@@ -139,13 +139,70 @@ public class Move {
         return isCapture == s.contains("x");
     }
 
-    public boolean matchesWithPromotion(String s){return isPromotion == s.contains("="); }
-
     public boolean departureFromFile(char file){
         return piece.x == (file - 'a');
     }
 
     public boolean departureFromRank(char rank){
         return piece.y == (7 - (rank - '1'));
+    }
+
+    // SAN = short algebraic notation
+    // TODO: disambiguate like in PGN
+    public String asSAN(){
+        if(isShortCastle){
+            return "0-0";
+        }
+        else if(isLongCastle){
+            return "0-0-0";
+        }
+        String destinationString = coordsToString(endingPosition);
+        // promotion can also be capture but we won't make it too confusing
+        String res;
+        if(isPromotion){
+            res = destinationString + "=" + pieceToSAN(getPromotedTo());
+        }
+        else if(isCapture){
+            res = pieceToSAN(piece) + "x" + destinationString;
+            if(piece instanceof Pawn){
+                res = coordsToString(startingPosition) + res;
+            }
+        }
+        // a simple piece move
+        else{
+            res = pieceToSAN(piece) + destinationString;
+        }
+        if(isCheck){
+            res += "+";
+        }
+        return res;
+    }
+
+    public String coordsToString(int[] coords){
+        return toLetter(coords[0]) + "" + toChessRow(coords[1]);
+    }
+
+    private String pieceToSAN(Piece piece){
+        if(piece instanceof Pawn){
+            return "";
+        }
+        else if(piece instanceof Rook){
+            return "R";
+        }
+        else if(piece instanceof Knight){
+            return "N";
+        }
+        else if(piece instanceof Bishop){
+            return "B";
+        }
+        else if(piece instanceof Queen){
+            return "Q";
+        }
+        else if(piece instanceof King){
+            return "K";
+        }
+        else{
+            throw new RuntimeException("Piece unknown!");
+        }
     }
 }

@@ -14,6 +14,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
@@ -107,6 +108,7 @@ public class MainApplication extends Application {
     HashMap<Square, Square> attackedSquares;
     Set<CheckSquare> checkSquares;
     Set<Piece> checkers;
+    Variation principalVariation;
 
     @Override
     public void start(Stage stage) {
@@ -328,6 +330,23 @@ public class MainApplication extends Application {
                 if(event.getCode() == KeyCode.X){
                     gameGUI.highlightCheckers = !gameGUI.highlightCheckers;
                 }
+                if(event.getCode() == KeyCode.S){
+                    // open popup window here
+                    final Stage dialog = new Stage();
+                    dialog.setTitle("Principal Variation");
+                    dialog.initModality(Modality.NONE);
+                    dialog.initOwner(stage);
+                    VBox dialogVbox = new VBox(20);
+                    dialogVbox.setAlignment(Pos.CENTER);
+
+                    String principalVariationString = principalVariation != null ? principalVariation.toString() : "undefined";
+                    Text text = new Text(principalVariationString);
+                    dialogVbox.getChildren().add(text);
+
+                    Scene dialogScene = new Scene(dialogVbox, 400, 150);
+                    dialog.setScene(dialogScene);
+                    dialog.show();
+                }
             }
         });
 
@@ -352,6 +371,7 @@ public class MainApplication extends Application {
 
         cutoffReached = minimax.cutoffReached;
         bestValue = minimax.bestValueAcrossDepths;
+        principalVariation = minimax.principalVariation;
 
         statisticsHaveChanged = true;
         return null;

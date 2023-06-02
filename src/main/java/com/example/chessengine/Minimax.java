@@ -4,6 +4,7 @@ import javafx.util.Pair;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -15,6 +16,7 @@ public class Minimax implements Runnable{
     boolean quiescenceSearchEnabled = true;
     // test principal variation first in an iterative deepening framework
     boolean pvTablesEnabled = true;
+    boolean generatePrincipalVariation = true;
     boolean isFinished;
 
     // in half moves (always uneven so enemy has the advantage)
@@ -31,6 +33,7 @@ public class Minimax implements Runnable{
 
     double bestValueAcrossDepths = 0.0;
     Move bestMoveAcrossDepths = null;
+    Variation principalVariation;
     Thread thread;
     double runtimeInSeconds;
     int positionsEvaluatedPerSecond;
@@ -72,24 +75,28 @@ public class Minimax implements Runnable{
     // always uses quiescence search and sorting
     // color = white(1) or black(-1)
     // new moves are set in call above
-    public double alphaBeta(double alpha, double beta, int depth, int color){
+    public Variation alphaBeta(double alpha, double beta, int depth, int color){
 
         // this sets game over
         List<Move> legalMoves = game.getLegalMoves();
 
         if(game.isOver()){
-            return color * evaluationMethod.staticEvaluation(game);
+            return new Variation(color * evaluationMethod.staticEvaluation(game));
         }
         else if(depth == 0){
             if(quiescenceSearchEnabled){
-                return quiesce(alpha, beta, color, quiescenceDepthForSearchDepth());
+                return new Variation(quiesce(alpha, beta, color, quiescenceDepthForSearchDepth()));
             }
-            return quiesce(alpha, beta, color, 0);
+            return new Variation(quiesce(alpha, beta, color, 0));
         }
 
         if(moveSortingEnabled) {
             legalMoves = getSortedWithPVTableIfEnabled(legalMoves);
         }
+
+        Variation bestVariation = null;
+
+        assert legalMoves.size() > 0 : "no legal moves but not game over!";
 
         for(Move move : legalMoves){
 
@@ -101,20 +108,23 @@ public class Minimax implements Runnable{
 
             game.executeMove(move);
 
-            double score = -alphaBeta(-beta, -alpha, depth - 1, -color);
+            Variation variationAfterMove = alphaBeta(-beta, -alpha, depth - 1, -color);
+            variationAfterMove.score *= -1;
+            Variation variationWithMove = new Variation(move, variationAfterMove);
 
             game.undoLastMove();
 
-            if(score >= beta){
+            if(variationWithMove.score >= beta){
                 cutoffReached++;
-                return beta;
+                return new Variation(beta);
             }
-            if(score > alpha){
-                alpha = score;
+            if(variationWithMove.score > alpha){
+                alpha = variationWithMove.score;
+                bestVariation = variationWithMove;
                 insertIntoPVTableIfEnabled(move);
             }
         }
-        return alpha;
+        return bestVariation != null ? bestVariation : new Variation(alpha);
     }
 
     void insertIntoPVTableIfEnabled(Move move){
@@ -213,18 +223,22 @@ public class Minimax implements Runnable{
 
             double bestValueAtDepth = Double.NEGATIVE_INFINITY;
             Move bestMoveAtDepth = null;
+            Variation bestVariationAtDepth = null;
 
             for (Move move : legalMoves) {
 
                 game.executeMove(move);
 
-                double score = -alphaBeta(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, searchDepthReached + 1, -color);
+                Variation variationAfterMove = alphaBeta(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, searchDepthReached + 1, -color);
+                variationAfterMove.score *= -1;
+                Variation variationWithMove = new Variation(move, variationAfterMove);
 
                 game.undoLastMove();
 
-                if (score > bestValueAtDepth) {
-                    bestValueAtDepth = score;
+                if (variationWithMove.score > bestValueAtDepth) {
+                    bestValueAtDepth = variationWithMove.score;
                     bestMoveAtDepth = move;
+                    bestVariationAtDepth = variationWithMove;
                     insertIntoPVTableIfEnabled(move);
                 }
 
@@ -236,6 +250,8 @@ public class Minimax implements Runnable{
             if(!isTimeUp()) {
                 bestMoveAcrossDepths = bestMoveAtDepth;
                 bestValueAcrossDepths = bestValueAtDepth;
+                principalVariation = bestVariationAtDepth;
+
                 quiescenceDepthReached = quiescenceDepthForSearchDepth();
                 searchDepthReached++;
             }
@@ -243,6 +259,7 @@ public class Minimax implements Runnable{
             else if(isTimeUp() && bestMoveAcrossDepths == null){
                 bestMoveAcrossDepths = bestMoveAtDepth;
                 bestValueAcrossDepths = bestValueAtDepth;
+                principalVariation = bestVariationAtDepth;
             }
 
             // mate found (prefer the quickest mate)
