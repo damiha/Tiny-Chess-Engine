@@ -7,11 +7,9 @@ import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.control.Button;
-import javafx.scene.control.MenuButton;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
@@ -47,8 +45,6 @@ public class MainApplication extends Application {
     int positionsEvaluatedPerSecond = 0;
     double runtimeInSeconds = 0.0;
     int searchDepthReached = 0;
-    boolean alphaBeta = false;
-    boolean moveSorting  = false;
     int cutoffReached = 0;
     double bestValue = 0.0;
 
@@ -73,15 +69,9 @@ public class MainApplication extends Application {
 
     boolean isOneTimeEngineMove = false;
 
-    boolean pvTablesEnabled = false;
-
     boolean statisticsHaveChanged = true;
 
     boolean screenIsEmpty = false;
-
-    boolean autoQueenActivated;
-
-    boolean quiescenceSearchEnabled;
 
     int quiescenceDepthReached;
 
@@ -102,13 +92,13 @@ public class MainApplication extends Application {
     boolean isClockRunningAfterGameOver = false;
     int numberOfMovesWithoutProgress = 0;
 
-    int maxSecondsToRespond;
-
     Set<Piece> pinnedPieces;
     HashMap<Square, Square> attackedSquares;
     Set<CheckSquare> checkSquares;
     Set<Piece> checkers;
     Variation principalVariation;
+
+    EngineSettings engineSettings;
 
     @Override
     public void start(Stage stage) {
@@ -117,6 +107,9 @@ public class MainApplication extends Application {
         Group root = new Group();
         Canvas canvas = new Canvas(windowWidth, windowHeight);
         gc = canvas.getGraphicsContext2D();
+
+        // ideal for 15|10 rapid chess
+        engineSettings = new EngineSettings();
 
         game = new Game();
         evaluationMethod = new FeatureBasedEvaluationMethod();
@@ -156,7 +149,7 @@ public class MainApplication extends Application {
                 else {
                     if(humanVsComputer) {
                         if (!isHumansTurn() && screenDrawnSinceMove && minimax == null) {
-                            minimax = new Minimax(game, updateStatistics, featureBasedEvaluationMethod);
+                            minimax = new Minimax(engineSettings, game, updateStatistics, featureBasedEvaluationMethod);
                             minimax.start();
                         }
                         // done
@@ -330,8 +323,7 @@ public class MainApplication extends Application {
                 if(event.getCode() == KeyCode.X){
                     gameGUI.highlightCheckers = !gameGUI.highlightCheckers;
                 }
-                if(event.getCode() == KeyCode.S){
-                    // open popup window here
+                if(event.getCode() == KeyCode.V){
                     final Stage dialog = new Stage();
                     dialog.setTitle("Principal Variation");
                     dialog.initModality(Modality.NONE);
@@ -347,6 +339,65 @@ public class MainApplication extends Application {
                     dialog.setScene(dialogScene);
                     dialog.show();
                 }
+                if(event.getCode() == KeyCode.S){
+                    final Stage dialog = new Stage();
+                    dialog.setTitle("Static Evaluation");
+                    dialog.initModality(Modality.NONE);
+                    dialog.initOwner(stage);
+                    VBox dialogVbox = new VBox(20);
+                    dialogVbox.setAlignment(Pos.CENTER);
+
+                    // TODO: display static evaluation function here
+
+                    Scene dialogScene = new Scene(dialogVbox, 400, 150);
+                    dialog.setScene(dialogScene);
+                    dialog.show();
+                }
+                if(event.getCode() == KeyCode.O){
+                    // open popup window here
+                    final Stage dialog = new Stage();
+                    dialog.setTitle("Engine Settings");
+                    dialog.initModality(Modality.APPLICATION_MODAL);
+                    dialog.initOwner(stage);
+                    VBox dialogVbox = new VBox(20);
+                    dialogVbox.setAlignment(Pos.CENTER);
+
+                    Text secondsText = new Text("Max seconds to respond (5s to 3600s): ");
+                    TextField secondsTextField = new TextField("" + engineSettings.maxSecondsToRespond);
+
+                    // only allow numbers
+                    secondsTextField.textProperty().addListener((observable, oldValue, newValue) -> {
+                        if (newValue.matches("\\d*")) return;
+                        secondsTextField.setText(newValue.replaceAll("[^\\d]", ""));
+                    });
+
+                    CheckBox moveSortingBox = new CheckBox("Move sorting");
+                    CheckBox quiescenceBox = new CheckBox("Quiescence search");
+                    CheckBox pvTableBox = new CheckBox("PV tables");
+
+                    moveSortingBox.setSelected(engineSettings.moveSortingEnabled);
+                    quiescenceBox.setSelected(engineSettings.quiescenceSearchEnabled);
+                    pvTableBox.setSelected(engineSettings.pvTablesEnabled);
+
+                    HBox secondsBox = new HBox(20);
+                    secondsBox.getChildren().addAll(secondsText, secondsTextField);
+
+                    Button applyButton = new Button("Apply");
+
+                    applyButton.setOnAction(e -> {
+                        engineSettings.maxSecondsToRespond = Math.min(3600, Math.max(5, Integer.parseInt(secondsTextField.getText())));
+                        engineSettings.moveSortingEnabled = moveSortingBox.isSelected();
+                        engineSettings.quiescenceSearchEnabled = quiescenceBox.isSelected();
+                        engineSettings.pvTablesEnabled = pvTableBox.isSelected();
+                        dialog.close();
+                    });
+
+                    dialogVbox.getChildren().addAll(secondsBox, moveSortingBox, quiescenceBox, pvTableBox, applyButton);
+
+                    Scene dialogScene = new Scene(dialogVbox, 600, 400);
+                    dialog.setScene(dialogScene);
+                    dialog.show();
+                }
             }
         });
 
@@ -356,13 +407,7 @@ public class MainApplication extends Application {
     // called by minimax whenever progress
     Function<Minimax, Void> updateStatistics = minimax -> {
         // update statistic
-        maxSecondsToRespond = minimax.maxSecondsToRespond;
         searchDepthReached = minimax.searchDepthReached;
-        alphaBeta = minimax.alphaBetaPruningEnabled;
-        moveSorting = minimax.moveSortingEnabled;
-        autoQueenActivated = minimax.autoQueenActivated;
-        quiescenceSearchEnabled = minimax.quiescenceSearchEnabled;
-        pvTablesEnabled = minimax.pvTablesEnabled;
         quiescenceDepthReached = minimax.quiescenceDepthReached;
 
         totalNumberPositionsEvaluated = minimax.totalNumberPositionsEvaluated;
@@ -529,14 +574,14 @@ public class MainApplication extends Application {
                 "Castling black: " + blackCastleRightString,
                 "En passant: " + game.enPassantEnabled,
                 "",
-                "Time to respond: " + maxSecondsToRespond,
+                "Time to respond: " + engineSettings.maxSecondsToRespond,
                 "Search depth completed: " + searchDepthReached,
                 "Quiescence depth completed: " + quiescenceDepthReached,
-                "Alpha-Beta: " + alphaBeta,
-                "Move sorting: " + moveSorting,
-                "Quiescence search: " + quiescenceSearchEnabled,
-                "PvTables: " + pvTablesEnabled,
-                "Auto-queen: " + autoQueenActivated,
+                "Alpha-Beta: " + engineSettings.alphaBetaPruningEnabled,
+                "Move sorting: " + engineSettings.moveSortingEnabled,
+                "Quiescence search: " + engineSettings.quiescenceSearchEnabled,
+                "PvTables: " + engineSettings.pvTablesEnabled,
+                "Auto-queen: " + engineSettings.autoQueenActivated,
                 "",
                 "Runtime (in sec): " + runtimeInSeconds,
                 "Positions evaluated: " + totalNumberPositionsEvaluated,
@@ -552,7 +597,8 @@ public class MainApplication extends Application {
                 "[C] to show check squares",
                 "[X] to show checkers",
                 "[V] to show principal variation",
-                "[S] to show static evaluation"
+                "[S] to show static evaluation",
+                "[O] to change settings"
         };
     }
 

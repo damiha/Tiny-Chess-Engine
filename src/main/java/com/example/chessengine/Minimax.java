@@ -9,14 +9,6 @@ import java.util.List;
 import java.util.function.Function;
 
 public class Minimax implements Runnable{
-
-    boolean alphaBetaPruningEnabled = true;
-    boolean moveSortingEnabled = true;
-    boolean autoQueenActivated = true;
-    boolean quiescenceSearchEnabled = true;
-    // test principal variation first in an iterative deepening framework
-    boolean pvTablesEnabled = true;
-    boolean generatePrincipalVariation = true;
     boolean isFinished;
 
     // in half moves (always uneven so enemy has the advantage)
@@ -42,13 +34,13 @@ public class Minimax implements Runnable{
     int millisSinceLastLifeSign = 1000;
     long timeStampLastLifeSign;
 
-    // used for iterative deepening search (search until time runs out)
-    int maxSecondsToRespond = 15;
-
     // don't use pvTables in quiescence for now
     HashMap<String, Move> pvTable;
 
-    public Minimax(Game game, Function<Minimax, Void> updateStatistics, EvaluationMethod evaluationMethod){
+    EngineSettings engineSettings;
+
+    public Minimax(EngineSettings engineSettings, Game game, Function<Minimax, Void> updateStatistics, EvaluationMethod evaluationMethod){
+        this.engineSettings = engineSettings;
         this.game = game;
         this.updateStatistics = updateStatistics;
         this.evaluationMethod = evaluationMethod;
@@ -84,13 +76,13 @@ public class Minimax implements Runnable{
             return new Variation(color * evaluationMethod.staticEvaluation(game));
         }
         else if(depth == 0){
-            if(quiescenceSearchEnabled){
-                return new Variation(quiesce(alpha, beta, color, quiescenceDepthForSearchDepth()));
+            if(engineSettings.quiescenceSearchEnabled){
+                return quiesce(alpha, beta, color, quiescenceDepthForSearchDepth());
             }
-            return new Variation(quiesce(alpha, beta, color, 0));
+            return quiesce(alpha, beta, color, 0);
         }
 
-        if(moveSortingEnabled) {
+        if(engineSettings.moveSortingEnabled) {
             legalMoves = getSortedWithPVTableIfEnabled(legalMoves);
         }
 
@@ -110,7 +102,7 @@ public class Minimax implements Runnable{
 
             Variation variationAfterMove = alphaBeta(-beta, -alpha, depth - 1, -color);
             variationAfterMove.score *= -1;
-            Variation variationWithMove = new Variation(move, variationAfterMove);
+            Variation variationWithMove = new Variation(move, variationAfterMove, false);
 
             game.undoLastMove();
 
@@ -128,22 +120,22 @@ public class Minimax implements Runnable{
     }
 
     void insertIntoPVTableIfEnabled(Move move){
-        if(pvTablesEnabled){
+        if(engineSettings.pvTablesEnabled){
             pvTable.put(game.toString(), move);
         }
     }
     // when directly game over, we have call from above
-    double quiesce(double alpha, double beta, int color, int depth){
+    Variation quiesce(double alpha, double beta, int color, int depth){
 
         totalNumberPositionsEvaluated++;
         double standPat = color * evaluationMethod.staticEvaluation(game);
 
         if(depth == 0){
-            return standPat;
+            return new Variation(standPat);
         }
 
         if (standPat >= beta) {
-            return beta;
+            return new Variation(beta);
         }
         if (alpha < standPat) {
             alpha = standPat;
@@ -153,6 +145,8 @@ public class Minimax implements Runnable{
         List<Move> pseudoLegalCaptures = game.getPseudoLegalCaptures();
         sortCapturesIfEnabled(pseudoLegalCaptures);
 
+        Variation bestVariation = new Variation(alpha);
+
         for(Move move : pseudoLegalCaptures){
 
             updateStatisticsAtInterval();
@@ -160,28 +154,35 @@ public class Minimax implements Runnable{
             if(isTimeUp()){
                 break;
             }
-            double score;
+            // how to handle illegal moves (we generate pseudo legal ones)
+            Variation variationWithMove;
+
             if(!move.isKingCapture()) {
                 game.executeMove(move);
-                score = -quiesce(-beta, -alpha, -color, depth - 1);
+
+                Variation variationAfterMove = quiesce(-beta, -alpha, -color, depth - 1);
+                variationAfterMove.score *= -1;
+                variationWithMove = new Variation(move, variationAfterMove, true);
+
                 game.undoLastMove();
             }
             else{
-                score = Double.POSITIVE_INFINITY;
+                variationWithMove = new Variation(move, new Variation(Double.POSITIVE_INFINITY), true);
             }
 
-            if(score >= beta){
-                return beta;
+            if(variationWithMove.score >= beta){
+                return new Variation(beta);
             }
-            if(score > alpha){
-                alpha = score;
+            if(variationWithMove.score > alpha){
+                alpha = variationWithMove.score;
+                bestVariation = variationWithMove;
             }
         }
-        return alpha;
+        return bestVariation;
     }
 
     List<Move> getSortedWithPVTableIfEnabled(List<Move> legalMoves){
-        Move pvMove = pvTablesEnabled ? pvTable.getOrDefault(game.toString(), null) : null;
+        Move pvMove = engineSettings.pvTablesEnabled ? pvTable.getOrDefault(game.toString(), null) : null;
         return pvMove != null ? getSortedMoves(legalMoves, pvMove) : getSortedMoves(legalMoves);
     }
 
@@ -204,7 +205,7 @@ public class Minimax implements Runnable{
 
     // for captures
     void sortCapturesIfEnabled(List<Move> possibleMoves){
-        if(moveSortingEnabled){
+        if(engineSettings.moveSortingEnabled){
             FeatureBasedEvaluationMethod.sortMoves(possibleMoves);
         }
     }
@@ -214,7 +215,7 @@ public class Minimax implements Runnable{
         List<Move> legalMoves = game.getLegalMoves();
         assert !legalMoves.isEmpty() : "game already over";
 
-        if(moveSortingEnabled) {
+        if(engineSettings.moveSortingEnabled) {
             legalMoves = getSortedWithPVTableIfEnabled(legalMoves);
         }
         int color = game.whoseTurn == PieceColor.White ? 1 : -1;
@@ -231,7 +232,7 @@ public class Minimax implements Runnable{
 
                 Variation variationAfterMove = alphaBeta(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, searchDepthReached + 1, -color);
                 variationAfterMove.score *= -1;
-                Variation variationWithMove = new Variation(move, variationAfterMove);
+                Variation variationWithMove = new Variation(move, variationAfterMove, false);
 
                 game.undoLastMove();
 
@@ -270,7 +271,7 @@ public class Minimax implements Runnable{
     }
 
     boolean isTimeUp(){
-        return (runtimeInSeconds > maxSecondsToRespond);
+        return (runtimeInSeconds > engineSettings.maxSecondsToRespond);
     }
 
     void updateStatisticsAtInterval(){
