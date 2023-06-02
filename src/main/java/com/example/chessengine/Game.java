@@ -67,14 +67,14 @@ public class Game {
             blackKing = king;
         }
         return new Piece[]{
-                new Rook(color, 0, y, this, false),
+                new Rook(color, 0, y, this),
                 new Knight(color, 1, y, this),
                 new Bishop(color, 2, y, this),
                 new Queen(color, 3, y, this),
                 king,
                 new Bishop(color, 5, y, this),
                 new Knight(color, 6, y, this),
-                new Rook(color, 7, y, this, true)
+                new Rook(color, 7, y, this)
         };
     }
 
@@ -129,9 +129,6 @@ public class Game {
 
                 if (move.isCapture()) {
                     placePieceAt(move.getCapturedPiece(), move.getCapturedPiece().getPosition());
-                }
-                if(move.piece instanceof Pawn pawn && move.isFirstMove){
-                    pawn.inStartingPosition = true;
                 }
             }
             // castling rights are stored at every time step
@@ -201,22 +198,16 @@ public class Game {
     }
     void updateCastleRights(Move move){
         // rook is captured - castling right is lost
-        if(move.isCapture() && move.getCapturedPiece() instanceof Rook capturedRook && !capturedRook.createdThroughPromotion){
+        if(move.isCapture() && move.getCapturedPiece() instanceof Rook capturedRook){
             removeCastleRightAfterRookCapture(capturedRook);
         }
-        if(move.piece instanceof Rook movedRook && !movedRook.createdThroughPromotion){
-            removeCastleRightAfterRookMove(movedRook);
+        if(move.piece instanceof Rook movedRook){
+            removeCastleRightAfterRookMove(movedRook, move.startingPosition);
         }
         // when king moves, both castling rights are taken away
         if(move.piece instanceof King king){
             king.canLongCastle = false;
             king.canShortCastle = false;
-        }
-    }
-    void updatePawnRights(Move move){
-        // take first mover right away
-        if(move.piece instanceof Pawn pawn){
-            pawn.inStartingPosition = false;
         }
     }
 
@@ -280,7 +271,6 @@ public class Game {
         }
 
         updateCastleRights(move);
-        updatePawnRights(move);
 
         if(move.isPromotion()){
             placePieceAt(move.getPromotedTo(), move.endingPosition);
@@ -326,21 +316,35 @@ public class Game {
 
     private void removeCastleRightAfterRookCapture(Rook capturedRook){
         King kingWhoLosesRight = capturedRook.color == PieceColor.White ? whiteKing : blackKing;
-        if(capturedRook.onShortSide){
-            kingWhoLosesRight.canShortCastle = false;
-        }
-        else{
-            kingWhoLosesRight.canLongCastle = false;
+
+        // not isOnShortSide != isOnLongSide (otherwise we might take away long side castling rights by moving short side rook on back rank)
+        boolean onBackRank = capturedRook.color == PieceColor.White ? (capturedRook.getPosition()[1] == 7) : (capturedRook.getPosition()[1] == 0);
+        boolean isOnShortSide = capturedRook.getPosition()[0] == 7;
+        boolean isOnLongSide = capturedRook.getPosition()[0] == 0;
+
+        if(onBackRank) {
+            if (isOnShortSide) {
+                kingWhoLosesRight.canShortCastle = false;
+            } else if (isOnLongSide) {
+                kingWhoLosesRight.canLongCastle = false;
+            }
         }
     }
 
-    private void removeCastleRightAfterRookMove(Rook movedRook){
+    private void removeCastleRightAfterRookMove(Rook movedRook, int[] rookStartingPosition){
         King kingWhoLosesRight = movedRook.color == PieceColor.White ? whiteKing : blackKing;
-        if(movedRook.onShortSide){
-            kingWhoLosesRight.canShortCastle = false;
-        }
-        else{
-            kingWhoLosesRight.canLongCastle = false;
+
+        // not isOnShortSide != isOnLongSide (otherwise we might take away long side castling rights by moving short side rook on back rank)
+        boolean onBackRank = movedRook.color == PieceColor.White ? (rookStartingPosition[1] == 7) : (rookStartingPosition[1] == 0);
+        boolean isOnShortSide = rookStartingPosition[0] == 7;
+        boolean isOnLongSide = rookStartingPosition[0] == 0;
+
+        if(onBackRank) {
+            if (isOnShortSide) {
+                kingWhoLosesRight.canShortCastle = false;
+            } else if (isOnLongSide) {
+                kingWhoLosesRight.canLongCastle = false;
+            }
         }
     }
 
@@ -936,5 +940,99 @@ public class Game {
         return other instanceof Game
                 && hashCode() == other.hashCode()
                 && whoseTurn == ((Game) other).whoseTurn;
+    }
+
+    public void loadFromFEN(String fenString){
+        String[] parts = fenString.split(" ");
+        assert parts.length == 6 : "a fen string always consists of six parts";
+
+        // piece placement
+        String placementString = parts[0];
+        this.position = positionFromFEN(placementString);
+
+        // whose turn
+        whoseTurn = whoseTurnFromFEN(parts[1]);
+
+        // castling rights
+        setCastlingRightsFromFEN(parts[2]);
+        
+        //TODO: en passant target square
+
+        // half move clock
+        numberOfMovesWithoutProgress = Integer.parseInt(parts[4]);
+
+        // full move count irrelevant
+    }
+
+    private Piece[][] positionFromFEN(String placementString){
+
+        Piece[][] loadedPosition = new Piece[8][8];
+
+        String[] rows = placementString.split("/");
+        assert rows.length == 8 : "8 rows must be described";
+
+        for(int y = 0; y < 8; y++){
+            String row = rows[y];
+            int x = 0;
+            for(char c : row.toCharArray()){
+                if(Character.isDigit(c)){
+                    int toSkip = c - '0';
+                    x += toSkip;
+                }
+                else{
+                    Piece piece = fromFENChar(c, x, y);
+                    // set kings (necessary for castling rights)
+                    if(piece instanceof King king){
+                        if(piece.color == PieceColor.White){
+                            whiteKing = king;
+                        }else{
+                            blackKing = king;
+                        }
+                    }
+                    loadedPosition[y][x] = piece;
+                    x++;
+                }
+            }
+        }
+        return loadedPosition;
+    }
+
+    private PieceColor whoseTurnFromFEN(String whoseTurnString){
+        return switch(whoseTurnString){
+            case "w" -> PieceColor.White;
+            case "b" -> PieceColor.Black;
+            default -> throw new RuntimeException("Could not determine whose move it is");
+        };
+    }
+
+    // assume variables whiteKing and blackKing are set correctly
+    private void setCastlingRightsFromFEN(String castlingFENString){
+        for(char c : castlingFENString.toCharArray()){
+            // both lost castling right
+            if(c == '-'){
+                break;
+            }
+            switch(c){
+                case 'K' -> whiteKing.canShortCastle = true;
+                case 'Q' -> whiteKing.canLongCastle = true;
+                case 'k' -> blackKing.canShortCastle = true;
+                case 'q' -> blackKing.canLongCastle = true;
+            }
+        }
+    }
+
+    private Piece fromFENChar(char c, int x, int y){
+        PieceColor color = Character.isUpperCase(c) ? PieceColor.White : PieceColor.Black;
+        c = Character.toUpperCase(c);
+
+        return switch(c){
+            case 'K' -> new King(color, x, y, this);
+            case 'Q' -> new Queen(color, x, y, this);
+            case 'B' -> new Bishop(color, x, y, this);
+            case 'N' -> new Knight(color, x, y, this);
+            case 'R' -> new Rook(color, x, y, this);
+            case 'P' -> new Pawn(color, x, y, this);
+            default -> throw new RuntimeException("Could not parse the piece");
+        };
     }
 }

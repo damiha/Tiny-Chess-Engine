@@ -60,9 +60,6 @@ public class Minimax implements Runnable{
 
         updateStatistics.apply(this);
 
-        // call garbage collector to get rid of lists (they are marked with null)
-        pvTable.clear();
-        System.gc();
         return bestMoveAcrossDepths;
     }
 
@@ -81,11 +78,9 @@ public class Minimax implements Runnable{
         List<Move> legalMoves = game.getLegalMoves();
 
         if(game.isOver()){
-            legalMoves = null;
             return color * evaluationMethod.staticEvaluation(game);
         }
         else if(depth == 0){
-            legalMoves = null;
             if(quiescenceSearchEnabled){
                 return quiesce(alpha, beta, color, quiescenceDepthForSearchDepth());
             }
@@ -112,7 +107,6 @@ public class Minimax implements Runnable{
 
             if(score >= beta){
                 cutoffReached++;
-                legalMoves = null;
                 return beta;
             }
             if(score > alpha){
@@ -120,7 +114,6 @@ public class Minimax implements Runnable{
                 insertIntoPVTableIfEnabled(move);
             }
         }
-        legalMoves = null;
         return alpha;
     }
 
@@ -168,14 +161,12 @@ public class Minimax implements Runnable{
             }
 
             if(score >= beta){
-                pseudoLegalCaptures = null;
                 return beta;
             }
             if(score > alpha){
                 alpha = score;
             }
         }
-        pseudoLegalCaptures = null;
         return alpha;
     }
 
@@ -259,7 +250,6 @@ public class Minimax implements Runnable{
                 break;
             }
         }
-        legalMoves = null;
     }
 
     boolean isTimeUp(){

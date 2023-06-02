@@ -5,7 +5,6 @@ public class Move {
     private boolean isCheck;
     private boolean isCapture;
     private boolean isPromotion;
-    boolean isFirstMove;
     boolean isTwoStepPawnMove;
     boolean isEnPassantCapture;
     boolean isShortCastle;
@@ -99,31 +98,6 @@ public class Move {
 
     public Piece getCapturedPiece(){
         return capturedPiece;
-    }
-
-    public Move getDeepCopy(){
-        Move deepCopy = new Move(piece, endingPosition);
-        deepCopy.startingPosition = startingPosition;
-
-        deepCopy.isFirstMove = isFirstMove;
-        deepCopy.isTwoStepPawnMove = isTwoStepPawnMove;
-
-        if(isPromotion()){
-            deepCopy.markAsPromotion(promotedTo);
-        }
-        if(isCastle()){
-            deepCopy.isShortCastle = isShortCastle;
-            deepCopy.isLongCastle = isLongCastle;
-        }
-
-        if(isEnPassantCapture()){
-            deepCopy.markAsEnPassantCapture(capturedPiece);
-        }
-        else if(isCapture()){
-            deepCopy.markAsCapture(capturedPiece);
-        }
-
-        return deepCopy;
     }
 
     public boolean matchesWith(String s){

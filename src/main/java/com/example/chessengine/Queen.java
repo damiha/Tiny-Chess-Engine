@@ -18,7 +18,7 @@ public class Queen extends Piece{
 
         // captures flag set by rook and bishop
         // rook-like moves
-        Rook tempRook = new Rook(color, x, y, game,true);
+        Rook tempRook = new Rook(color, x, y, game);
 
         for(Move move : tempRook.getPossibleMoves()){
             // exchange rook for queen

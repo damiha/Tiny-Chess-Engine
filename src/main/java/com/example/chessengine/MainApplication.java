@@ -2,13 +2,20 @@ package com.example.chessengine;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
+import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Button;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.io.File;
@@ -112,7 +119,7 @@ public class MainApplication extends Application {
         game = new Game();
         evaluationMethod = new FeatureBasedEvaluationMethod();
         positionToDisplay = new Piece[8][8];
-        updatePositionToDisplay();
+        refreshScene();
 
         featureBasedEvaluationMethod = new FeatureBasedEvaluationMethod();
         managementGUI = new ManagementGUI(this);
@@ -153,8 +160,7 @@ public class MainApplication extends Application {
                         // done
                         if (!isHumansTurn() && minimax != null && minimax.isFinished) {
                             if (minimax.bestMoveAcrossDepths != null) {
-                                executeAndCheckGameOver(minimax.bestMoveAcrossDepths);
-                                updatePositionToDisplay();
+                                executeOnBoard(minimax.bestMoveAcrossDepths);
                             } else {
                                 engineResigned = false;
                             }
@@ -210,8 +216,62 @@ public class MainApplication extends Application {
                     File file = fileChooser.showOpenDialog(stage);
                     if(file != null){
                         game.loadFromPGN(file);
-                        updatePositionToDisplay();
+                        refreshScene();
                     }
+
+                    // always analyse loaded position from white's perspective
+                    humanPlays = PieceColor.White;
+                    sideChosen = true;
+                }
+                else if(event.getCode() == KeyCode.F){
+
+                    // open popup window here
+                    final Stage dialog = new Stage();
+                    dialog.setTitle("Enter your FEN string");
+                    dialog.initModality(Modality.NONE);
+                    dialog.initOwner(stage);
+                    VBox dialogVbox = new VBox(20);
+                    dialogVbox.setAlignment(Pos.CENTER);
+
+                    MenuItem whiteItem = new MenuItem("white");
+                    MenuItem blackItem = new MenuItem("black");
+                    MenuButton menuButton = new MenuButton("Perspective");
+
+                    whiteItem.setOnAction(e -> {
+                        gameGUI.setPerspective(PieceColor.White);
+                        menuButton.setText("white");
+                    });
+                    blackItem.setOnAction(e -> {
+                        gameGUI.setPerspective(PieceColor.Black);
+                        menuButton.setText("black");
+                    });
+
+                    menuButton.getItems().addAll(whiteItem, blackItem);
+
+                    TextField tf = new TextField();
+                    Button btn = new Button("Load");
+
+                    btn.setOnAction(e -> {
+                        String fenString = tf.getText();
+
+                        // load into chess board here
+                        game.loadFromFEN(fenString);
+                        dialog.close();
+                    });
+
+                    dialogVbox.getChildren().add(tf);
+                    dialogVbox.getChildren().add(menuButton);
+                    dialogVbox.getChildren().add(btn);
+
+                    Scene dialogScene = new Scene(dialogVbox, 400, 150);
+                    dialog.setScene(dialogScene);
+                    dialog.showAndWait();
+
+                    // done with reading in
+                    refreshScene();
+
+                    humanVsComputer = false;
+                    modeChosen = true;
 
                     // always analyse loaded position from white's perspective
                     humanPlays = PieceColor.White;
@@ -249,7 +309,7 @@ public class MainApplication extends Application {
             if(isInGame() && minimax == null){
                  if(event.getCode() == KeyCode.U){
                      game.undoLastMove();
-                     updatePositionToDisplay();
+                     refreshScene();
                  }
                  if(event.getCode() == KeyCode.E){
                     humanVsComputer = true;
@@ -418,18 +478,8 @@ public class MainApplication extends Application {
     }
 
     void executeOnBoard(Move move){
-
         executeAndCheckGameOver(move);
-        updatePositionToDisplay();
-
-        screenDrawnSinceMove = false;
-        isPieceSelected = false;
-        selectedPiece = null;
-
-        evaluationMethod.staticEvaluation(game);
-        evaluationSummary = evaluationMethod.getSummary();
-
-        statisticsHaveChanged = true;
+        refreshScene();
     }
 
     void executeAndCheckGameOver(Move move){
@@ -481,9 +531,22 @@ public class MainApplication extends Application {
                 "[A] to show attacked squares",
                 "[C] to show check squares",
                 "[X] to show checkers",
-                "",
-                evaluationSummary,
+                "[V] to show principal variation",
+                "[S] to show static evaluation"
         };
+    }
+
+    void refreshScene(){
+        updatePositionToDisplay();
+
+        screenDrawnSinceMove = false;
+        isPieceSelected = false;
+        selectedPiece = null;
+
+        evaluationMethod.staticEvaluation(game);
+        evaluationSummary = evaluationMethod.getSummary();
+
+        statisticsHaveChanged = true;
     }
 
     void endSuspension(){

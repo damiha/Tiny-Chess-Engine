@@ -76,7 +76,7 @@ public class ManagementGUI {
         int y = windowHeight / 2;
 
         gc.setFill(Color.BLACK);
-        gc.fillText("Human vs Human - [H]\n\nHuman vs Computer - [C]\n\nLoad PGN - [L]", x, y);
+        gc.fillText("Human vs Human - [H]\n\nHuman vs Computer - [C]\n\nLoad PGN - [L]\n\nLoad FEN - [F]", x, y);
     }
 
     // TODO: make this prettier

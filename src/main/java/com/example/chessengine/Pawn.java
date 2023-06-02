@@ -7,12 +7,8 @@ import java.util.Set;
 
 public class Pawn extends Piece{
 
-    // TODO: add en passant later
-    boolean inStartingPosition;
     public Pawn(PieceColor color, int x, int y, Game game) {
         super(color, x, y,game);
-        // can move two spots
-        inStartingPosition = true;
     }
 
     @Override
@@ -35,7 +31,7 @@ public class Pawn extends Piece{
             oneStepDoable = true;
         }
         // two-step in front (you can never promote with this move)
-        if(inStartingPosition && oneStepDoable && game.position[y + 2 * direction][x] == null){
+        if(inStartingPosition() && oneStepDoable && game.position[y + 2 * direction][x] == null){
             Move twoStep = new Move(this, new int[]{x, y + 2 * direction});
             twoStep.isTwoStepPawnMove = true;
             moves.add(twoStep);
@@ -80,14 +76,11 @@ public class Pawn extends Piece{
             }
         }
 
-        // important for undo move
-        if(inStartingPosition){
-            for(Move move : moves){
-                move.isFirstMove = true;
-            }
-        }
-
         return moves;
+    }
+
+    public boolean inStartingPosition(){
+        return (color == PieceColor.White && y == 6) || (color == PieceColor.Black && y == 1);
     }
 
     @Override
