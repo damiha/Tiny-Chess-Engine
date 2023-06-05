@@ -45,6 +45,8 @@ public class Minimax implements Runnable{
         this.updateStatistics = updateStatistics;
         this.evaluationMethod = evaluationMethod;
         pvTable = new HashMap<>();
+
+        timeStampLastLifeSign = System.currentTimeMillis();
     }
 
     public Move getEngineMove(){

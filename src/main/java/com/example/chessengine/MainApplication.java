@@ -344,12 +344,11 @@ public class MainApplication extends Application {
                     dialog.setTitle("Static Evaluation");
                     dialog.initModality(Modality.NONE);
                     dialog.initOwner(stage);
-                    VBox dialogVbox = new VBox(20);
-                    dialogVbox.setAlignment(Pos.CENTER);
 
-                    // TODO: display static evaluation function here
 
-                    Scene dialogScene = new Scene(dialogVbox, 400, 150);
+                    FeatureBasedEvaluationGUI fbeGUI = new FeatureBasedEvaluationGUI(game);
+
+                    Scene dialogScene = new Scene(fbeGUI.getGUI(), 600, 600);
                     dialog.setScene(dialogScene);
                     dialog.show();
                 }
@@ -608,10 +607,6 @@ public class MainApplication extends Application {
         screenDrawnSinceMove = false;
         isPieceSelected = false;
         selectedPiece = null;
-
-        evaluationMethod.staticEvaluation(game);
-        evaluationSummary = evaluationMethod.getSummary();
-
         statisticsHaveChanged = true;
     }
 
