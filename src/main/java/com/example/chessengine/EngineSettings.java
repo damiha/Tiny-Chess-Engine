@@ -7,6 +7,7 @@ public class EngineSettings {
     boolean autoQueenActivated;
     boolean quiescenceSearchEnabled;
     boolean pvTablesEnabled;
+    boolean openingBookEnabled;
     int maxSecondsToRespond;
 
     // ideal for playing 15|10 rapid chess
@@ -16,6 +17,7 @@ public class EngineSettings {
         autoQueenActivated = true;
         quiescenceSearchEnabled = true;
         pvTablesEnabled = true;
+        openingBookEnabled = true;
 
         maxSecondsToRespond = 15;
     }

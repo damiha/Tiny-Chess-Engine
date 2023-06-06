@@ -165,7 +165,7 @@ public class Move {
         else if(isCapture){
             res = pieceToSAN(piece) + "x" + destinationString;
             if(piece instanceof Pawn){
-                res = coordsToString(startingPosition) + res;
+                res = toLetter(startingPosition[0]) + res;
             }
         }
         // a simple piece move

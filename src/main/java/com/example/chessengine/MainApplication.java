@@ -81,7 +81,6 @@ public class MainApplication extends Application {
 
     // for analysis
     EvaluationMethod evaluationMethod;
-    String evaluationSummary = "";
     boolean isWhiteInCheck, isBlackInCheck;
     Outcome outcome = Outcome.Open;
 
@@ -100,6 +99,8 @@ public class MainApplication extends Application {
 
     EngineSettings engineSettings;
 
+    OpeningBook openingBook;
+
     @Override
     public void start(Stage stage) {
 
@@ -110,6 +111,7 @@ public class MainApplication extends Application {
 
         // ideal for 15|10 rapid chess
         engineSettings = new EngineSettings();
+        openingBook = new OpeningBook();
 
         game = new Game();
         evaluationMethod = new FeatureBasedEvaluationMethod();
@@ -149,7 +151,7 @@ public class MainApplication extends Application {
                 else {
                     if(humanVsComputer) {
                         if (!isHumansTurn() && screenDrawnSinceMove && minimax == null) {
-                            minimax = new Minimax(engineSettings, game, updateStatistics, featureBasedEvaluationMethod);
+                            minimax = new Minimax(engineSettings, game, openingBook, updateStatistics, featureBasedEvaluationMethod);
                             minimax.start();
                         }
                         // done
@@ -373,13 +375,20 @@ public class MainApplication extends Application {
                     CheckBox moveSortingBox = new CheckBox("Move sorting");
                     CheckBox quiescenceBox = new CheckBox("Quiescence search");
                     CheckBox pvTableBox = new CheckBox("PV tables");
+                    CheckBox openingBookBox = new CheckBox("Opening book");
+
+                    NumberField randomSeedField = new NumberField("Seed:", openingBook.randomSeed);
+                    NumberField numberMovesOpeningField = new NumberField("Max moves from opening book:",
+                            openingBook.maxNumberOfMovesFromBook);
 
                     moveSortingBox.setSelected(engineSettings.moveSortingEnabled);
                     quiescenceBox.setSelected(engineSettings.quiescenceSearchEnabled);
                     pvTableBox.setSelected(engineSettings.pvTablesEnabled);
+                    openingBookBox.setSelected(engineSettings.openingBookEnabled);
 
                     HBox secondsBox = new HBox(20);
                     secondsBox.getChildren().addAll(secondsText, secondsTextField);
+                    secondsBox.setAlignment(Pos.CENTER);
 
                     Button applyButton = new Button("Apply");
 
@@ -388,10 +397,16 @@ public class MainApplication extends Application {
                         engineSettings.moveSortingEnabled = moveSortingBox.isSelected();
                         engineSettings.quiescenceSearchEnabled = quiescenceBox.isSelected();
                         engineSettings.pvTablesEnabled = pvTableBox.isSelected();
+                        engineSettings.openingBookEnabled = openingBookBox.isSelected();
+
+                        openingBook.randomSeed = randomSeedField.getValue();
+                        openingBook.maxNumberOfMovesFromBook = Math.max(1, numberMovesOpeningField.getValue());
+
                         dialog.close();
                     });
 
-                    dialogVbox.getChildren().addAll(secondsBox, moveSortingBox, quiescenceBox, pvTableBox, applyButton);
+                    dialogVbox.getChildren().addAll(secondsBox, moveSortingBox, quiescenceBox, pvTableBox,
+                            openingBookBox, randomSeedField.getGUI(), numberMovesOpeningField.getGUI(), applyButton);
 
                     Scene dialogScene = new Scene(dialogVbox, 600, 400);
                     dialog.setScene(dialogScene);

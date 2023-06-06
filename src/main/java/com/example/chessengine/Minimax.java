@@ -39,7 +39,9 @@ public class Minimax implements Runnable{
 
     EngineSettings engineSettings;
 
-    public Minimax(EngineSettings engineSettings, Game game, Function<Minimax, Void> updateStatistics, EvaluationMethod evaluationMethod){
+    OpeningBook openingBook;
+
+    public Minimax(EngineSettings engineSettings, Game game, OpeningBook openingBook, Function<Minimax, Void> updateStatistics, EvaluationMethod evaluationMethod){
         this.engineSettings = engineSettings;
         this.game = game;
         this.updateStatistics = updateStatistics;
@@ -47,9 +49,18 @@ public class Minimax implements Runnable{
         pvTable = new HashMap<>();
 
         timeStampLastLifeSign = System.currentTimeMillis();
+
+        this.openingBook = openingBook;
     }
 
     public Move getEngineMove(){
+
+        if(engineSettings.openingBookEnabled){
+             Move recommendedMove = openingBook.getMove(game);
+             if(recommendedMove != null){
+                 return recommendedMove;
+             }
+        }
 
         start = System.currentTimeMillis();
 

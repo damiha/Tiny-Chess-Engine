@@ -136,8 +136,8 @@ public class Game {
 
             if(debugOn) {
                 boardHistory.pop();
-                history.pop();
             }
+            history.pop();
             // if a move was executed, game must have been open beforehand
             outcome = Outcome.Open;
             changeTurns();
@@ -277,9 +277,9 @@ public class Game {
         }
 
         if(debugOn) {
-            history.push(move.toString());
             boardHistory.push(this.toString());
         }
+        history.push(move.asSAN());
 
         String boardString = GameUtils.boardToString(this);
         repetitionsOfReachedPosition = repetitionsPerPosition.getOrDefault(boardString, 0) + 1;
