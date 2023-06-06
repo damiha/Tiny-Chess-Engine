@@ -24,6 +24,15 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
     // the more pieces come off the board, the bigger the difference gets
     double valueDifferenceSlope = 1.0 / 16.0;
 
+    // not inf since not checkmate yet, but it is super promising
+    double valueCanGoForMate = Integer.MAX_VALUE;
+
+    // minimize those when your winning
+    double valueKingToKingDistance = -50;
+    double valueRestrictHuntedKing = -5;
+    // that's where checkmate should be delivered ideally
+    double valueDistanceToTopLeftCorner = -100;
+
     // encourages mobility
     double valuePerAdditionalPossibleMove = 0.01;
     public double staticEvaluation(Game game){
@@ -39,6 +48,20 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
                 || game.getOutcome() == Outcome.DrawBy50MoveRule
                 || game.getOutcome() == Outcome.DrawByInsufficientMaterial){
             return 0;
+        }
+        else if(ChessFeatures.canGoForMate(game) != null){
+
+            PieceColor canGoForMate = ChessFeatures.canGoForMate(game);
+            PieceColor huntedKingColor = canGoForMate.getOppositeColor();
+
+            double sign = canGoForMate == PieceColor.White ? +1 : -1;
+
+            // move king closer to deliver checkmate (or if one the run, maximize distance to delay checkmate)
+            double kingToKingComponent = sign * valueKingToKingDistance * ChessFeatures.getKingToKingDistance(game);
+            double kingMobilityComponent = sign * valueRestrictHuntedKing * ChessFeatures.recentNumberOfMovesOfHuntedKing(game, huntedKingColor);
+            double kingToTopLeftComponent = sign * valueDistanceToTopLeftCorner * ChessFeatures.getDistanceHuntedKingToTopLeftCorner(game, huntedKingColor);
+
+            return (sign * valueCanGoForMate) + kingToKingComponent + kingMobilityComponent + kingToTopLeftComponent;
         }
         else{
             ChessFeatures chessFeatures = new ChessFeatures(game);

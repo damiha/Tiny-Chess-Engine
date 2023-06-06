@@ -84,6 +84,29 @@ public class FeatureBasedEvaluationGUI {
                 String.format("King safety: %b (w), %b (b)",features.isSafe(game.whiteKing), features.isSafe(game.blackKing)));
         HBox kingSafe = getGUWithValue(isKingSafeText, method.valueHavingCastled);
 
+        // end game play
+        PieceColor colorGoForMate = ChessFeatures.canGoForMate(game);
+        String whoCanGoForMateString =  colorGoForMate == null ? "-" : colorGoForMate.name();
+        Text canGoForMateText = new Text(
+                String.format("Can go for mate: %s", whoCanGoForMateString));
+        HBox canGoForMate = getGUWithValue(canGoForMateText, method.valueCanGoForMate);
+
+        Text kingToKingDistanceText = new Text(
+                String.format("King to king distance: %d", ChessFeatures.getKingToKingDistance(game)));
+        HBox kingToKingDistance = getGUWithValue(kingToKingDistanceText, method.valueKingToKingDistance);
+
+        String movesOfHuntedKingString =
+                colorGoForMate == null ? "-" : "" + ChessFeatures.recentNumberOfMovesOfHuntedKing(game, colorGoForMate.getOppositeColor());
+        Text movesOfHuntedKingText = new Text(
+                String.format("Recent moves hunted king: %s", movesOfHuntedKingString));
+        HBox movesOfHuntedKing = getGUWithValue(movesOfHuntedKingText, method.valueRestrictHuntedKing);
+
+        String distanceHuntedKingToTopLeftString =
+                colorGoForMate == null ? "-" : "" + ChessFeatures.getDistanceHuntedKingToTopLeftCorner(game, colorGoForMate.getOppositeColor());
+        Text distanceHuntedKingToTopLeftText = new Text(
+                String.format("Distance hunted king to top left corner: %s", distanceHuntedKingToTopLeftString));
+        HBox distanceHuntedKingToTopLeft = getGUWithValue(distanceHuntedKingToTopLeftText, method.valueDistanceToTopLeftCorner);
+
         // final evaluation
         Text finalEvaluationText = new Text(String.format("Evaluation: %.3f", method.staticEvaluation(game)));
 
@@ -103,6 +126,12 @@ public class FeatureBasedEvaluationGUI {
         dialogVbox.getChildren().add(kingSideSafe);
         dialogVbox.getChildren().add(queenSideSafe);
         dialogVbox.getChildren().add(kingSafe);
+
+        // endgame
+        dialogVbox.getChildren().add(canGoForMate);
+        dialogVbox.getChildren().add(kingToKingDistance);
+        dialogVbox.getChildren().add(distanceHuntedKingToTopLeft);
+        dialogVbox.getChildren().add(movesOfHuntedKing);
 
         dialogVbox.getChildren().add(finalEvaluationText);
 

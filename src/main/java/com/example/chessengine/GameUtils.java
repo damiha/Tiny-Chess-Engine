@@ -75,7 +75,7 @@ public class GameUtils {
                 Piece other = game.getPieceAt(location);
                 attackedSquares.add(new Square(location, attacker));
 
-                if(other != null && isSliding){
+                if(other != null && !(other instanceof King king && king.color != attacker.color) && isSliding){
                     break;
                 }
             }

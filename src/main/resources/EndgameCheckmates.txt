@@ -1,0 +1,20 @@
+// check whether can deliver checkmate after last enemy pawn is captured
+// (might take more than 6 moves so we need a different evaluation function)
+
+// king and rook vs king
+8/8/8/8/4k3/8/3K4/6R1 w - - 0 1
+
+// king and queen vs king (SOLVED)
+8/8/8/8/4k3/8/3K4/5Q2 w - - 0 1
+
+// two bishops and king vs king (SOLVED)
+8/8/8/8/4k3/8/1B1K4/5B2 w - - 0 1
+
+// bishop, knight and king vs king
+8/8/8/8/4k3/8/1B1K4/5B2 w - - 0 1
+
+// to test attack squares
+1k6/8/1K6/8/3R4/8/8/8 w - - 0 1
+
+// test this to see if caching bug is fixed
+1k6/4K3/2B5/8/8/8/5B2/8 w - - 0 1

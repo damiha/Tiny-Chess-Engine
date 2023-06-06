@@ -17,6 +17,35 @@ public class ChessFeatures {
     public ChessFeatures(Game game){
         setPawnAndPieceStats(game);
         updateKingSafety(game);
+
+    }
+
+    // null = nobody can go for mate
+    public static PieceColor canGoForMate(Game game){
+        // game is not drawn by insufficient material if we make it this far
+        // we can for sure go for mate if we are against a lone king
+        if(game.blackPieces.size() == 1){
+            return PieceColor.White;
+        }
+        else if(game.whitePieces.size() == 1){
+            return PieceColor.Black;
+        }
+        return null;
+    }
+
+    public static int getKingToKingDistance(Game game){
+        return Math.abs(game.whiteKing.x - game.blackKing.x) + Math.abs(game.whiteKing.y - game.blackKing.y);
+    }
+
+    public static int getDistanceHuntedKingToTopLeftCorner(Game game, PieceColor whoIsHunted){
+
+        King huntedKing = whoIsHunted == PieceColor.White ? game.whiteKing : game.blackKing;
+
+        return Math.abs(huntedKing.x) + Math.abs(huntedKing.y);
+    }
+
+    public static int recentNumberOfMovesOfHuntedKing(Game game, PieceColor whoIsHunted){
+        return whoIsHunted == PieceColor.White ? game.whiteKing.recentNumberOfPossibleMoves : game.blackKing.recentNumberOfPossibleMoves;
     }
 
     public void setPawnAndPieceStats(Game game){

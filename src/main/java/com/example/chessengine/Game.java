@@ -558,7 +558,10 @@ public class Game {
             }
 
             // deal with king moves
-            if(pieceToBeMoved instanceof King) {
+            if(pieceToBeMoved instanceof King king) {
+
+                king.setRecentNumberOfPossibleMoves(0);
+
                 for (Move candidateMove : possiblePieceMoves) {
                     // king can't walk into check
                     if (squaresAttackedByOpponent.containsKey(new Square(candidateMove.endingPosition))) {
@@ -573,6 +576,7 @@ public class Game {
 
                     // passed both tests so valid
                     legalMoves.add(candidateMove);
+                    king.incrementRecentNumberOfPossibleMoves();
                 }
             }
             else {
@@ -682,6 +686,9 @@ public class Game {
         if(GameUtils.isLeapingPiece(piece)){
             return false;
         }
+        // TODO: fix bug (in move generator, we try out moves but when we only look at last executed, we might have moves
+        // TODO: that don't fit anymore
+        /*
         boolean linesChanged = false;
         boolean diagonalsChanged = false;
 
@@ -697,6 +704,8 @@ public class Game {
         }
 
         return linesChanged || diagonalsChanged;
+        */
+        return true;
     }
 
     private boolean onDiagonals(Piece piece, int[] position){
@@ -1169,6 +1178,10 @@ public class Game {
 
     // assume variables whiteKing and blackKing are set correctly
     private void setCastlingRightsFromFEN(String castlingFENString){
+        // castle rights have to be gained explicitly
+        whiteKing.canShortCastle = whiteKing.canLongCastle = false;
+        blackKing.canShortCastle = blackKing.canLongCastle = false;
+
         for(char c : castlingFENString.toCharArray()){
             // both lost castling right
             if(c == '-'){
