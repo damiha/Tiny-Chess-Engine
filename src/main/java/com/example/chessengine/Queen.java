@@ -39,7 +39,11 @@ public class Queen extends Piece{
     }
 
     @Override
-    public Set<Square> getAttackedSquares() {
+    public Set<Square> getAttackedSquares(boolean needsRecalculation) {
+        // retrieve from cache
+        if(cachedOn != null && cachedOn.equals(getCurrentSquare()) && !needsRecalculation){
+            return cachedAttackSquares;
+        }
         Set<Square> attackSquares = new HashSet<>();
         for(BiFunction<int[], Integer, int[]> lines : GameUtils.lines){
             attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, this, lines));
@@ -47,6 +51,11 @@ public class Queen extends Piece{
         for(BiFunction<int[], Integer, int[]> diagonal : GameUtils.diagonals){
             attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, this, diagonal));
         }
+
+        // cache
+        cachedOn = getCurrentSquare();
+        cachedAttackSquares = attackSquares;
+
         return attackSquares;
     }
 

@@ -84,7 +84,12 @@ public class Pawn extends Piece{
     }
 
     @Override
-    public Set<Square> getAttackedSquares() {
+    public Set<Square> getAttackedSquares(boolean needsRecalculation) {
+
+        // retrieve from cache
+        if(cachedOn != null && cachedOn.equals(getCurrentSquare())){
+            return cachedAttackSquares;
+        }
 
         int direction = color == PieceColor.White ? -1 : 1;
         int[] leftCapture = new int[]{x - 1, y + direction};
@@ -97,6 +102,11 @@ public class Pawn extends Piece{
         if(x <= 6){
             attackedSquares.add(new Square(rightCapture, this));
         }
+
+        // cache
+        cachedAttackSquares = attackedSquares;
+        cachedOn = getCurrentSquare();
+
         return attackedSquares;
     }
 

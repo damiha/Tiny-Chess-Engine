@@ -354,6 +354,11 @@ public class Game {
             outcome = Outcome.DrawBy50MoveRule;
         }
 
+        // check after every capture
+        if(move.isCapture() && isDrawByInsufficientMaterial()){
+            outcome = Outcome.DrawByInsufficientMaterial;
+        }
+
         if(guaranteedToBeLegal){
             setOwnKingOutOfCheck();
         }
@@ -361,6 +366,58 @@ public class Game {
         executedMoves.push(move);
 
         changeTurns();
+    }
+
+    boolean isDrawByInsufficientMaterial(){
+        Bishop singleWhiteBishop = null;
+        Bishop singleBlackBishop = null;
+        int numberOfWhiteKnights = 0;
+        int numberOfWhiteBishops = 0;
+        int numberOfBlackKnights = 0;
+        int numberOfBlackBishops = 0;
+
+        for(Piece piece : whitePieces){
+            if(piece instanceof Pawn || piece instanceof Rook || piece instanceof Queen){
+                return false;
+            }
+            else if(piece instanceof Bishop bishop){
+                singleWhiteBishop = bishop;
+                numberOfWhiteBishops++;
+            }
+            else if(piece instanceof Knight){
+                numberOfWhiteKnights++;
+            }
+        }
+        if(numberOfWhiteKnights > 1 || numberOfWhiteBishops > 1 || (numberOfWhiteKnights == 1 && numberOfWhiteBishops == 1)){
+            return false;
+        }
+        // white has no pawns or major pieces and max. a single knight or a single bishop (but not both)
+        for(Piece piece : blackPieces){
+            if(piece instanceof Pawn || piece instanceof Rook || piece instanceof Queen){
+                return false;
+            }
+            else if(piece instanceof Bishop bishop){
+                singleBlackBishop = bishop;
+                numberOfBlackBishops++;
+            }
+            else if(piece instanceof Knight){
+                numberOfBlackKnights++;
+            }
+        }
+        if(numberOfBlackKnights > 1 || numberOfBlackBishops > 1 || (numberOfBlackKnights == 1 && numberOfBlackBishops==1)){
+            return false;
+        }
+        // white has no pawns or major pieces and max. a single knight or a single bishop (but not both)
+        // black has no pawns or major pieces and max. a single knight or a single bishop (but not both)
+        if(numberOfWhiteKnights == 1 && (numberOfBlackKnights == 1 || numberOfBlackBishops == 1)){
+            return false;
+        }
+        // white has king and max 1 bishop
+        // opposite color bishops is only non draw now
+        if(numberOfWhiteBishops == 1 && numberOfBlackBishops == 1){
+            return GameUtils.isWhite(singleWhiteBishop.getCurrentSquare()) == GameUtils.isWhite(singleBlackBishop.getCurrentSquare());
+        }
+        return true;
     }
 
     void setOwnKingOutOfCheck(){
@@ -463,12 +520,16 @@ public class Game {
         King kingToBeProtected = whoseTurn == PieceColor.White ? whiteKing : blackKing;
         King kingToBeAttacked = whoseTurn == PieceColor.White ? blackKing : whiteKing;
 
-        Set<Piece> pinnedPieces = getPinnedPieces(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
-
         // consider a pawn of the right (defending) color with en passant possibility automatically as pinned
         // to be pinned doesn't mean that it can't move, just more checks
+        Set<Piece> pinnedPieces = getPinnedPieces(whoseTurn, kingToBeProtected.x, kingToBeProtected.y);
 
-        HashMap<Square, Square> squaresAttackedByOpponent = getAttackedSquares(oppositeColor);
+        // important for caching and sliding pieces
+        int numberOfMovesPlayed = executedMoves.size();
+        Move lastMove = numberOfMovesPlayed > 0 ? executedMoves.get(numberOfMovesPlayed - 1) : null;
+        Move secondToLastMove = numberOfMovesPlayed > 1 ? executedMoves.get(numberOfMovesPlayed - 2) : null;
+
+        HashMap<Square, Square> squaresAttackedByOpponent = getAttackedSquares(oppositeColor, lastMove, secondToLastMove);
         Set<CheckSquare> checkSquares = getCheckSquares(kingToBeAttacked);
 
         boolean isKingInCheck = squaresAttackedByOpponent.containsKey(new Square(kingToBeProtected.x, kingToBeProtected.y));
@@ -591,13 +652,17 @@ public class Game {
     }
 
     // TODO: awkward solution, change this
-    public HashMap<Square, Square> getAttackedSquares(PieceColor color){
+    public HashMap<Square, Square> getAttackedSquares(PieceColor color, Move lastMove, Move secondToLastMove){
 
         HashMap<Square, Square> attackedSquares = new HashMap<>();
         List<Piece> pieces = (color == PieceColor.White ? whitePieces : blackPieces);
 
         for(int pieceIdx = 0; pieceIdx < pieces.size(); pieceIdx++){
-           for(Square square : pieces.get(pieceIdx).getAttackedSquares()){
+
+            Piece piece = pieces.get(pieceIdx);
+            boolean needsRecalculation = needsRecalculation(piece, lastMove, secondToLastMove);
+
+            for(Square square : piece.getAttackedSquares(needsRecalculation)){
                // merge
                if(attackedSquares.containsKey(square)){
                    Square alreadyAdded = attackedSquares.get(square);
@@ -607,9 +672,42 @@ public class Game {
                else{
                    attackedSquares.put(square, square);
                }
-           }
+            }
         }
         return attackedSquares;
+    }
+
+    // if piece moved, we automatically recalculate (no matter piece type)
+    private boolean needsRecalculation(Piece piece, Move lastMove, Move secondToLastMove){
+        if(GameUtils.isLeapingPiece(piece)){
+            return false;
+        }
+        boolean linesChanged = false;
+        boolean diagonalsChanged = false;
+
+        if(piece instanceof Rook || piece instanceof Queen){
+            boolean linesChangedLastMove = (lastMove != null && (onLines(piece, lastMove.startingPosition) || onLines(piece, lastMove.endingPosition)));
+            boolean linesChangedSecondToLastMove = (secondToLastMove != null && (onLines(piece, secondToLastMove.startingPosition) || onLines(piece, secondToLastMove.endingPosition)));
+            linesChanged = linesChangedLastMove || linesChangedSecondToLastMove;
+        }
+        if(piece instanceof Bishop || piece instanceof Queen){
+            boolean diagonalsChangedLastMove = (lastMove != null && (onDiagonals(piece, lastMove.startingPosition) || onDiagonals(piece, lastMove.endingPosition)));
+            boolean diagonalsChangedSecondToLastMove = (secondToLastMove != null && (onDiagonals(piece, secondToLastMove.startingPosition) || onDiagonals(piece, secondToLastMove.endingPosition)));
+            diagonalsChanged = diagonalsChangedLastMove || diagonalsChangedSecondToLastMove;
+        }
+
+        return linesChanged || diagonalsChanged;
+    }
+
+    private boolean onDiagonals(Piece piece, int[] position){
+        int pieceLinearPosition = (piece.y * 8) + piece.x;
+        int linearPosition = position[1] * 8 + position[0];
+
+        return ((linearPosition - pieceLinearPosition) % 9 == 0) || ((linearPosition - pieceLinearPosition) % 7 == 0);
+    }
+
+    private boolean onLines(Piece piece, int[] position){
+        return (piece.x == position[0] || piece.y == position[1]);
     }
 
     public Set<Piece> getCheckers(HashMap<Square, Square> squaresAttackedByOpponent, King kingToBeProtected){
@@ -1021,6 +1119,9 @@ public class Game {
 
         Piece[][] loadedPosition = new Piece[8][8];
 
+        whitePieces = new ArrayList<>();
+        blackPieces = new ArrayList<>();
+
         String[] rows = placementString.split("/");
         assert rows.length == 8 : "8 rows must be described";
 
@@ -1034,6 +1135,14 @@ public class Game {
                 }
                 else{
                     Piece piece = fromFENChar(c, x, y);
+
+                    if(piece.color == PieceColor.White){
+                        whitePieces.add(piece);
+                    }
+                    else{
+                        blackPieces.add(piece);
+                    }
+
                     // set kings (necessary for castling rights)
                     if(piece instanceof King king){
                         if(piece.color == PieceColor.White){
@@ -1072,6 +1181,14 @@ public class Game {
                 case 'q' -> blackKing.canLongCastle = true;
             }
         }
+    }
+
+    public Move getLastMove(){
+        return executedMoves.size() > 0 ? executedMoves.peek() : null;
+    }
+
+    public Move getSecondToLastMove(){
+        return executedMoves.size() > 1 ? executedMoves.get(executedMoves.size() - 2) : null;
     }
 
     private Piece fromFENChar(char c, int x, int y){

@@ -12,6 +12,10 @@ public abstract class Piece {
 
     int recentNumberOfPossibleMoves;
 
+    // caching for attack squares
+    Square cachedOn;
+    Set<Square> cachedAttackSquares;
+
     public Piece(PieceColor color, int x, int y, Game game){
         this.color = color;
         this.game = game;
@@ -24,7 +28,7 @@ public abstract class Piece {
     // find yourself on the board
     public abstract List<Move> getPossibleMoves();
 
-    public abstract Set<Square> getAttackedSquares();
+    public abstract Set<Square> getAttackedSquares(boolean needsRecalculation);
 
     public void setRecentNumberOfPossibleMoves(int n){
         recentNumberOfPossibleMoves = n;
@@ -47,5 +51,9 @@ public abstract class Piece {
         this.position[1] = position[1];
         this.x = position[0];
         this.y = position[1];
+    }
+
+    public Square getCurrentSquare(){
+        return new Square(x, y);
     }
 }

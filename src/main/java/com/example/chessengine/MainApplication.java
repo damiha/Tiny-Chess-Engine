@@ -492,7 +492,7 @@ public class MainApplication extends Application {
         isWhiteInCheck = game.isWhiteKingInCheck;
         isBlackInCheck = game.isBlackKingInCheck;
         pinnedPieces = game.getPinnedPieces();
-        attackedSquares = game.getAttackedSquares(game.whoseTurn.getOppositeColor());
+        attackedSquares = game.getAttackedSquares(game.whoseTurn.getOppositeColor(), game.getLastMove(), game.getSecondToLastMove());
         checkSquares = game.getCheckSquares(game.getKingToBeAttacked());
         checkers = game.getCheckers(attackedSquares, game.getKingToBeProtected());
     }

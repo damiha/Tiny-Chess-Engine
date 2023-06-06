@@ -86,4 +86,16 @@ public class GameUtils {
     public static boolean insideBoard(int[] position){
         return position[0] >= 0 && position[0] <= 7 && position[1]  >= 0 && position[1] <= 7;
     }
+
+    public static boolean isSlidingPiece(Piece piece){
+        return piece instanceof Bishop || piece instanceof Rook || piece instanceof Queen;
+    }
+
+    public static boolean isLeapingPiece(Piece piece){
+        return !isSlidingPiece(piece);
+    }
+
+    public static boolean isWhite(Square square){
+        return (square.y % 2 == square.x % 2);
+    }
 }

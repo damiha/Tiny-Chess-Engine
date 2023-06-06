@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 
 public class Knight extends Piece{
+
     public Knight(PieceColor color, int x, int y, Game game) {
         super(color, x, y, game);
     }
@@ -40,8 +41,16 @@ public class Knight extends Piece{
     }
 
     @Override
-    public Set<Square> getAttackedSquares() {
-        return GameUtils.getAttackSquareOfLeaping(game, this, GameUtils.getKnightMoves);
+    public Set<Square> getAttackedSquares(boolean needsRecalculation) {
+        if(cachedOn != null && cachedOn.equals(getCurrentSquare())){
+            return cachedAttackSquares;
+        }
+
+        // cache
+        cachedAttackSquares = GameUtils.getAttackSquareOfLeaping(game, this, GameUtils.getKnightMoves);
+        cachedOn = getCurrentSquare();
+
+        return cachedAttackSquares;
     }
 
 

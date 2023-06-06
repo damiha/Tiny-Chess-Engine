@@ -6,5 +6,6 @@ public enum Outcome {
     Stalemate,
     DrawByRepetition,
     DrawBy50MoveRule,
+    DrawByInsufficientMaterial,
     Open
 }

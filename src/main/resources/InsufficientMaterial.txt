@@ -1,0 +1,14 @@
+// insufficient after black bishop takes white knight since same color bishops
+8/2k1b3/8/6N1/3K4/2B5/8/8 b - - 0 1
+
+// after white knight takes black rook, knight and king vs king
+8/2k5/4r3/8/3K1N2/8/8/8 w - - 0 1
+
+// black knight takes white knight
+8/2k5/4n3/8/5N2/2K5/8/8 b - - 0 1
+
+// king and bishop vs bishop
+8/2kb4/8/5P2/8/2K5/8/8 b - - 0 1
+
+// king vs king after pawn capture
+8/8/5k2/5P2/8/2K5/8/8 b - - 0 1

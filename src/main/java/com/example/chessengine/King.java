@@ -63,7 +63,13 @@ public class King extends Piece{
         return moves;
     }
 
-    public Set<Square> getAttackedSquares(){
+    public Set<Square> getAttackedSquares(boolean needsRecalculation){
+
+        // retrieve cached
+        if(cachedOn != null && cachedOn.equals(getCurrentSquare())){
+            return cachedAttackSquares;
+        }
+
         int[][] deltas = {
                 {-1, -1},
                 {-1, 0},
@@ -82,6 +88,11 @@ public class King extends Piece{
                 attackedSquares.add(new Square(pos, this));
             }
         }
+
+        // cache
+        cachedAttackSquares = attackedSquares;
+        cachedOn = getCurrentSquare();
+
         return attackedSquares;
     }
 

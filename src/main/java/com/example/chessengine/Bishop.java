@@ -44,11 +44,22 @@ public class Bishop extends Piece{
     }
 
     @Override
-    public Set<Square> getAttackedSquares() {
+    public Set<Square> getAttackedSquares(boolean needsRecalculation) {
+
+        // retrieve from cache
+        if(cachedOn != null && cachedOn.equals(getCurrentSquare()) && !needsRecalculation){
+            return cachedAttackSquares;
+        }
+
         Set<Square> attackSquares = new HashSet<>();
         for(BiFunction<int[], Integer, int[]> diagonal : GameUtils.diagonals){
             attackSquares.addAll(GameUtils.getAttackSquareOfSliding(game, this, diagonal));
         }
+
+        // cache
+        cachedAttackSquares = attackSquares;
+        cachedOn = getCurrentSquare();
+
         return attackSquares;
     }
 

@@ -36,7 +36,8 @@ public class FeatureBasedEvaluationMethod extends EvaluationMethod {
         }
         else if(game.getOutcome() == Outcome.Stalemate
                 || game.getOutcome() == Outcome.DrawByRepetition
-                || game.getOutcome() == Outcome.DrawBy50MoveRule){
+                || game.getOutcome() == Outcome.DrawBy50MoveRule
+                || game.getOutcome() == Outcome.DrawByInsufficientMaterial){
             return 0;
         }
         else{
