@@ -72,8 +72,18 @@ public class Minimax implements Runnable{
     }
 
     // adaptive quiescence search
+    // depth + quiescence depth should always be an even number
     int quiescenceDepthForSearchDepth(){
-        return searchDepthReached <= 2 ? 2 : 4;
+        int depthCalculatingCurrently = searchDepthReached + 1;
+        // search depth 3 should be last one to get a 2 quiescence depth
+        if(depthCalculatingCurrently <= 3){
+            return depthCalculatingCurrently;
+        }
+        // uneven + uneven = even
+        else if(depthCalculatingCurrently % 2 == 1){
+            return 3;
+        }
+        return 4;
     }
 
     // from chessprogramming.org
