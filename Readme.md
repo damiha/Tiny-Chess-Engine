@@ -21,7 +21,7 @@ What does the static evaluation consider:
 
 How fast is it:
 
-- legal move generation makes it quiet slow. We get around 50k to 80k calls to the static evaluation function per second
+- legal move generation makes it quite slow. We get around 50k to 80k calls to the static evaluation function per second
 - we can search 4 half moves (+ 4 half moves for the quiescence search) in 15 seconds
 
 
