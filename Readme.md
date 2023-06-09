@@ -1,7 +1,5 @@
 # Minimax Chess Engine
 
-## a minimalistic chess engine in Java written in less than 24 hours
-
 What is implemented:
 
 - chess with all standard rules (including en passant, draw by 3-fold repetition, 50-move rule, draw by insufficient material)
