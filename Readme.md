@@ -28,12 +28,13 @@ How fast is it:
 How strong is it:
 
 - with 15 seconds max. response times, it confidently beats 1500 and wins/loses against 1600 and 1700 bots half of the time
-(so I guess its somewhere around 1650)
+(so I guess it's somewhere around 1650)
 - per game there are generally one or two situations where it blunders because of the horizon effect (apart from those, it plays rather decent chess, accuracy by stockfish around 75%)
 
 What is missing:
 
 - engine should think when it is the opponent's turn
+- analysis of the pawn structure (isolated pawns, doubled and backward pawns etc)
 - a fined tuned (and data driven) evaluation function
 - general optimizations (bitboards, killer heuristic etc)
 - exporting games to PGN to analyze them with e.g. Stockfish
